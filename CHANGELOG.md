@@ -5,6 +5,20 @@ All notable changes to AltTab will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.1] - 2026-09-10
+
+### Fixed
+
+- **First Option-Tab landing on the wrong window** after the switcher had been idle: the panel is served from a cached window list re-sorted by live MRU order, so a window opened (or closed) since the last gather shifted every slot by one and a single Tab jumped to the 2nd/3rd-most-recent window. The initial selection is now anchored against the window that actually has focus (cheap WindowServer probe, with a bounded Accessibility fallback only when the focused window is unknown to the cache), and the mid-session reconcile re-anchors against the fresh list unless the user has already cycled or clicked.
+- **Background apps corrupting the MRU order**: `kAXFocusedWindowChanged` from non-frontmost apps (Electron/Chromium window churn, windows closed by finished jobs) promoted their windows to the front while the user worked elsewhere. Promotions are now accepted only from the frontmost app.
+- **Confirming a stale (already-closed) entry raised an arbitrary window**: the raise-first-window fallback in `WindowActivator` is gone, and confirm now skips ghost windows via a single batched liveness query, falling through to the next live window in MRU order.
+- **Intra-app focus tracking silently dead after every update**: `AXObserverAddNotification` failures (Accessibility not yet granted, app's AX server not up) were stored as if they had succeeded and never retried. Observers now register only on success, are reinstalled when Accessibility is granted after launch, retry once for just-launched apps, and self-heal on an app's first activation.
+- Rapid Option-Tab toggling right after a switch no longer anchors on the window just switched to (the in-flight activation is treated as focus ground truth), and a pending activation is superseded when a different app or window takes focus.
+
+### Changed
+
+- Per-session selection logic (initial anchor, cycling, reconcile policy, confirmation order) extracted from `AppDelegate` into a pure `SwitcherSelection` type in `AltTabCore`, covered by unit tests.
+
 ## [1.3.0] - 2026-07-02
 
 ### Added
@@ -103,6 +117,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Build/install script with `--system` flag for /Applications
 - Shift-Tab, Arrow keys, Escape, Enter, and mouse click navigation
 
+[1.3.1]: https://github.com/sergio-farfan/alttab-macos/releases/tag/v1.3.1
 [1.3.0]: https://github.com/sergio-farfan/alttab-macos/releases/tag/v1.3.0
 [1.2.1]: https://github.com/sergio-farfan/alttab-macos/releases/tag/v1.2.1
 [1.2.0]: https://github.com/sergio-farfan/alttab-macos/releases/tag/v1.2.0

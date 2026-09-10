@@ -21,6 +21,7 @@
 		A100001400000000000000C1 /* MRUOrder.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200001400000000000000C1; };
 		A100001500000000000000C2 /* SwitcherStateMachine.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200001500000000000000C2; };
 		A100001600000000000000C3 /* WCAGContrast.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200001600000000000000C3; };
+		A100001700000000000000C4 /* SwitcherSelection.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200001700000000000000C4; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -40,6 +41,7 @@
 		A200001400000000000000C1 /* MRUOrder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MRUOrder.swift; sourceTree = "<group>"; };
 		A200001500000000000000C2 /* SwitcherStateMachine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwitcherStateMachine.swift; sourceTree = "<group>"; };
 		A200001600000000000000C3 /* WCAGContrast.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WCAGContrast.swift; sourceTree = "<group>"; };
+		A200001700000000000000C4 /* SwitcherSelection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwitcherSelection.swift; sourceTree = "<group>"; };
 		A3000001000000000000000D /* AltTab.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = AltTab.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -68,6 +70,7 @@
 				A20000010000000000000001 /* AppDelegate.swift */,
 				A20000020000000000000002 /* HotkeyManager.swift */,
 				A200001500000000000000C2 /* SwitcherStateMachine.swift */,
+				A200001700000000000000C4 /* SwitcherSelection.swift */,
 				A20000030000000000000003 /* WindowModel.swift */,
 				A200001400000000000000C1 /* MRUOrder.swift */,
 				A200001600000000000000C3 /* WCAGContrast.swift */,
@@ -165,6 +168,7 @@
 				A10000010000000000000001 /* AppDelegate.swift in Sources */,
 				A10000020000000000000002 /* HotkeyManager.swift in Sources */,
 				A100001500000000000000C2 /* SwitcherStateMachine.swift in Sources */,
+				A100001700000000000000C4 /* SwitcherSelection.swift in Sources */,
 				A10000030000000000000003 /* WindowModel.swift in Sources */,
 				A100001400000000000000C1 /* MRUOrder.swift in Sources */,
 				A100001600000000000000C3 /* WCAGContrast.swift in Sources */,
@@ -304,7 +308,7 @@
 				CODE_SIGN_ENTITLEMENTS = AltTab/AltTab.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 7;
+				CURRENT_PROJECT_VERSION = 8;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = AltTab/Info.plist;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
@@ -312,7 +316,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 1.3.0;
+				MARKETING_VERSION = 1.3.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.alttab.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -327,7 +331,7 @@
 				CODE_SIGN_ENTITLEMENTS = AltTab/AltTab.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 7;
+				CURRENT_PROJECT_VERSION = 8;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = AltTab/Info.plist;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
@@ -335,7 +339,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 1.3.0;
+				MARKETING_VERSION = 1.3.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.alttab.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;

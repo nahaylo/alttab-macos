@@ -5,7 +5,9 @@
 //  Handles the actual window switching: unminimizes if needed, activates the
 //  owning application, and raises the specific window via AXUIElement. Window
 //  matching uses CGWindowID first (via _AXUIElementGetWindow), falling back
-//  to title matching, then first-window-of-app as a last resort.
+//  to exact-title matching. When neither matches, only the app activation
+//  stands — deliberately no raise-first-window fallback, which could surface
+//  an arbitrary window the user never selected.
 //
 //  Author:  Sergio Farfan <sergio.farfan@gmail.com>
 //  Version: 1.1.0
@@ -29,6 +31,24 @@ enum WindowActivator {
     /// Upper bound (seconds) on a single AX message. Long enough for a legitimately busy
     /// app to answer, short enough that a wedged app can't tie up the queue indefinitely.
     private static let axMessagingTimeout: Float = 1.0
+
+    /// Returns which of the given windows still exist in the window server —
+    /// one batched WindowServer query, no AX IPC. Used at confirm time to skip
+    /// ghost entries (windows closed since the last gather) before activating.
+    /// Minimized and other-Space windows still exist and pass the check.
+    /// CGWindowListCreateDescriptionFromArray expects the IDs stored directly
+    /// as pointer-sized CFArray values (NULL callbacks) — bridging [CGWindowID]
+    /// `as CFArray` yields CFNumbers and silently matches nothing. Fails open
+    /// (all live) if the query itself fails, so confirm can still switch.
+    static func liveWindowIDs(_ ids: [CGWindowID]) -> Set<CGWindowID> {
+        guard !ids.isEmpty else { return [] }
+        var values: [UnsafeRawPointer?] = ids.map { UnsafeRawPointer(bitPattern: UInt($0)) }
+        guard let idArray = CFArrayCreate(kCFAllocatorDefault, &values, values.count, nil),
+              let descriptions = CGWindowListCreateDescriptionFromArray(idArray) as? [[String: Any]] else {
+            return Set(ids)
+        }
+        return Set(descriptions.compactMap { $0[kCGWindowNumber as String] as? CGWindowID })
+    }
 
     /// Activates the given window: brings the owning app forward on the main thread, then
     /// unminimizes (if needed) and raises the specific window via AXUIElement off the main
@@ -110,10 +130,8 @@ enum WindowActivator {
             }
         }
 
-        // Last resort: raise the first window
-        if let firstWindow = axWindows.first {
-            AXUIElementPerformAction(firstWindow, kAXRaiseAction as CFString)
-            AXUIElementSetAttributeValue(firstWindow, kAXMainAttribute as CFString, true as CFTypeRef)
-        }
+        // No match: leave the app activation as the failure mode. Raising an
+        // arbitrary window here (the old last resort) surfaced windows the
+        // user never picked when a stale/ghost entry was confirmed.
     }
 }

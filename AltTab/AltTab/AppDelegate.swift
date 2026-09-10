@@ -30,7 +30,14 @@ class AppDelegate: NSObject, NSApplicationDelegate, HotkeyDelegate {
     private var permissionManager: PermissionManager!
 
     private var currentWindows: [WindowInfo] = []
-    private var selectedIndex: Int = 0
+    /// Per-session selection state (initial anchor, cycling, reconcile policy)
+    /// — pure logic in AltTabCore, unit-tested in SwitcherSelectionTests.
+    private var selection = SwitcherSelection()
+    /// Focus anchor captured once per session. reconcile() must re-anchor
+    /// against the same reference point the session opened with — re-probing
+    /// would expose the selection to focus drift (a sheet appearing, background
+    /// churn) while the switcher is up.
+    private var sessionFocusedID: CGWindowID?
     private var switcherActive: Bool = false
     /// Incremented on every activation; async completions (refresh, previews)
     /// belonging to an older session are dropped.
@@ -48,7 +55,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, HotkeyDelegate {
         switcherPanel = SwitcherPanel()
         switcherPanel.onWindowClicked = { [weak self] index in
             guard let self = self, self.switcherActive, index < self.currentWindows.count else { return }
-            self.selectedIndex = index
+            self.selection.select(index: index)
             // Option may still be held — end the tap session so its release
             // doesn't re-confirm and Tab can start a fresh session.
             self.hotkeyManager.cancelSession()
@@ -69,6 +76,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, HotkeyDelegate {
                 guard let self = self else { return }
                 if AXIsProcessTrusted() {
                     NSLog("AltTab: Accessibility granted after brief wait, hotkey active")
+                    // WindowModel was built pre-grant, so its AXObserver
+                    // registrations failed — intra-app focus tracking would
+                    // stay dead until relaunch without this.
+                    self.windowModel.reinstallAXObservers()
                     self.hotkeyManager.start()
                 } else {
                     NSLog("AltTab: Accessibility still not trusted, prompting user")
@@ -77,6 +88,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, HotkeyDelegate {
                         forName: .accessibilityGranted, object: nil, queue: .main
                     ) { [weak self] _ in
                         NSLog("AltTab: Accessibility granted, starting hotkey manager")
+                        self?.windowModel.reinstallAXObservers()
                         self?.hotkeyManager.start()
                     }
                 }
@@ -115,9 +127,15 @@ class AppDelegate: NSObject, NSApplicationDelegate, HotkeyDelegate {
             hotkeyManager.cancelSession()
             return
         }
-        selectedIndex = min(1, currentWindows.count - 1) // start on second window (MRU)
+        // Anchor against the actual focused window: the cache can be stale
+        // (a window opened since the last gather is missing from it), in which
+        // case slot 0 already holds the previous window and the classic
+        // slot-1 anchor would jump one slot too far.
+        sessionFocusedID = windowModel.frontmostWindowID()
+        selection.activate(windowIDs: currentWindows.map { $0.windowID },
+                           focusedWindowID: sessionFocusedID)
         switcherActive = true
-        switcherPanel.show(windows: currentWindows, selectedIndex: selectedIndex)
+        switcherPanel.show(windows: currentWindows, selectedIndex: selection.selectedIndex)
 
         // Reconcile against a fresh gather off the main thread.
         windowModel.refreshWindows { [weak self] fresh in
@@ -129,24 +147,32 @@ class AppDelegate: NSObject, NSApplicationDelegate, HotkeyDelegate {
 
     func hotkeyDidCycleNext() {
         guard switcherActive, !currentWindows.isEmpty else { return }
-        selectedIndex = (selectedIndex + 1) % currentWindows.count
-        switcherPanel.updateSelection(index: selectedIndex)
+        selection.cycleNext()
+        switcherPanel.updateSelection(index: selection.selectedIndex)
     }
 
     func hotkeyDidCyclePrevious() {
         guard switcherActive, !currentWindows.isEmpty else { return }
-        selectedIndex = (selectedIndex - 1 + currentWindows.count) % currentWindows.count
-        switcherPanel.updateSelection(index: selectedIndex)
+        selection.cyclePrevious()
+        switcherPanel.updateSelection(index: selection.selectedIndex)
     }
 
     func hotkeyDidConfirm() {
         guard switcherActive, !currentWindows.isEmpty,
-              selectedIndex < currentWindows.count else {
+              selection.selectedIndex < currentWindows.count else {
             dismissSwitcher()
             return
         }
-        let window = currentWindows[selectedIndex]
+        // The cache can hold ghosts (windows closed since the last gather);
+        // activating one would surface an arbitrary window. Fall through the
+        // confirmation order to the first window that still exists — verified
+        // with one batched WindowServer query.
+        let byID = Dictionary(currentWindows.map { ($0.windowID, $0) },
+                              uniquingKeysWith: { first, _ in first })
+        let candidates = selection.confirmationOrder.compactMap { byID[$0] }
+        let live = WindowActivator.liveWindowIDs(candidates.map { $0.windowID })
         dismissSwitcher()
+        guard let window = candidates.first(where: { live.contains($0.windowID) }) else { return }
         WindowActivator.activate(window: window)
         windowModel.noteExplicitActivation(pid: window.ownerPID, windowID: window.windowID)
     }
@@ -158,8 +184,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, HotkeyDelegate {
     // MARK: - Refresh & Previews
 
     /// Applies a freshly gathered window list to an active switcher: carries
-    /// over captured previews, keeps the selection on the same window, and
-    /// rebuilds the panel only if the window set or order actually changed.
+    /// over captured previews and rebuilds the panel only if the window set or
+    /// order actually changed. Selection policy lives in SwitcherSelection:
+    /// re-anchor while the user hasn't cycled (so a stale initial default
+    /// can't survive the corrected list), follow the selected window after a
+    /// manual cycle or click.
     private func reconcile(with fresh: [WindowInfo]) {
         guard !fresh.isEmpty else {
             hotkeyManager.cancelSession()
@@ -174,17 +203,17 @@ class AppDelegate: NSObject, NSApplicationDelegate, HotkeyDelegate {
             updated[index].thumbnail = thumbnails[updated[index].windowID]
         }
 
-        let selectedID = currentWindows.indices.contains(selectedIndex) ? currentWindows[selectedIndex].windowID : nil
-        let changed = updated.map { $0.windowID } != currentWindows.map { $0.windowID }
+        let idsChanged = updated.map { $0.windowID } != currentWindows.map { $0.windowID }
+        let oldIndex = selection.selectedIndex
         currentWindows = updated
-        guard changed else { return }
+        selection.reconcile(windowIDs: updated.map { $0.windowID },
+                            focusedWindowID: sessionFocusedID)
 
-        if let id = selectedID, let index = updated.firstIndex(where: { $0.windowID == id }) {
-            selectedIndex = index
-        } else {
-            selectedIndex = min(selectedIndex, updated.count - 1)
+        if idsChanged {
+            switcherPanel.show(windows: updated, selectedIndex: selection.selectedIndex)
+        } else if selection.selectedIndex != oldIndex {
+            switcherPanel.updateSelection(index: selection.selectedIndex)
         }
-        switcherPanel.show(windows: updated, selectedIndex: selectedIndex)
     }
 
     private func startPreviewCapture(session: Int) {

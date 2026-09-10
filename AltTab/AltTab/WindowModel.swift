@@ -123,6 +123,61 @@ final class WindowModel {
 
     // MARK: - Enumeration API (main thread)
 
+    /// Best-effort ID of the window that actually has user focus right now.
+    /// Returns nil when it cannot tell — callers fall back to the classic
+    /// slot-1 anchor. Resolution order:
+    /// 1. A fresh pendingActivation: an explicit switch is still landing, so
+    ///    probing would report the window being switched AWAY from and a
+    ///    rapid re-invoke would anchor on the wrong slot.
+    /// 2. The frontmost app's topmost on-screen layer-0 window (one cheap
+    ///    WindowServer query) when the cache knows that window.
+    /// 3. When it doesn't — either a brand-new focused window (true previous
+    ///    is slot 0) or a sheet/child above its listed parent (true previous
+    ///    is slot 1) — ask the app which window is focused: one AX round trip
+    ///    bounded by the standard timeout, on this rare branch only.
+    func frontmostWindowID() -> CGWindowID? {
+        if let pending = pendingActivation,
+           Date().timeIntervalSince(pending.at) < Self.pendingActivationWindow {
+            return pending.windowID
+        }
+        guard let frontPID = NSWorkspace.shared.frontmostApplication?.processIdentifier,
+              frontPID != selfPID else { return nil }
+
+        let cgTopmost = topmostOnScreenWindowID(ownedBy: frontPID)
+        if let id = cgTopmost, cachedWindows.contains(where: { $0.windowID == id }) {
+            return id
+        }
+
+        let axApp = AXUIElementCreateApplication(frontPID)
+        AXUIElementSetMessagingTimeout(axApp, Self.axMessagingTimeout)
+        var focusedRef: CFTypeRef?
+        if AXUIElementCopyAttributeValue(axApp, kAXFocusedWindowAttribute as CFString, &focusedRef) == .success,
+           let focused = focusedRef,
+           CFGetTypeID(focused) == AXUIElementGetTypeID() {
+            let focusedWindow = focused as! AXUIElement
+            AXUIElementSetMessagingTimeout(focusedWindow, Self.axMessagingTimeout)
+            var windowID: CGWindowID = 0
+            _ = _AXUIElementGetWindow(focusedWindow, &windowID)
+            if windowID != 0 { return windowID }
+        }
+        return cgTopmost
+    }
+
+    private func topmostOnScreenWindowID(ownedBy pid: pid_t) -> CGWindowID? {
+        guard let infoList = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements],
+                                                        kCGNullWindowID) as? [[String: Any]] else { return nil }
+        for info in infoList {
+            guard let ownerPID = info[kCGWindowOwnerPID as String] as? pid_t, ownerPID == pid,
+                  let layer = info[kCGWindowLayer as String] as? Int, layer == 0,
+                  let id = info[kCGWindowNumber as String] as? CGWindowID,
+                  let bounds = info[kCGWindowBounds as String] as? [String: CGFloat],
+                  let w = bounds["Width"], let h = bounds["Height"],
+                  w > 0, h > 0 else { continue }
+            return id
+        }
+        return nil
+    }
+
     /// Returns the last gathered window list re-sorted by current MRU. Gathers
     /// synchronously only when the cache is empty (first use before the warm-up
     /// completes). Follow with refreshWindows() to reconcile against reality.
@@ -301,6 +356,12 @@ final class WindowModel {
             object: nil, queue: .main
         ) { [weak self] notification in
             guard let app = notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication else { return }
+            // Self-heal: an observer registration that failed earlier (app was
+            // busy at grant time, AX server not up at launch) succeeds here on
+            // the app's first activation; installed pids return immediately.
+            if app.activationPolicy == .regular {
+                self?.installAXObserver(for: app.processIdentifier)
+            }
             self?.promoteAppWindows(pid: app.processIdentifier)
         }
     }
@@ -313,6 +374,11 @@ final class WindowModel {
                 mru.promoteToFront(pending.windowID)
                 return
             }
+        } else if pendingActivation != nil {
+            // A different app activated: the pending switch is superseded and
+            // must not be consumed by a LATER activation of its app, nor keep
+            // anchoring frontmostWindowID() on a window that lost focus.
+            pendingActivation = nil
         }
 
         let axApp = AXUIElementCreateApplication(pid)
@@ -353,20 +419,34 @@ final class WindowModel {
         }
     }
 
-    /// Creates an AXObserver for a single app and watches for focused-window changes.
-    private func installAXObserver(for pid: pid_t) {
-        guard axObservers[pid] == nil else { return }
+    /// Creates an AXObserver for a single app and watches for focused-window
+    /// changes. Registration fails when Accessibility is not yet granted
+    /// (kAXErrorAPIDisabled) or the app's AX server is not up yet; failures
+    /// are NOT stored, so a later reinstallAXObservers()/retry can succeed.
+    @discardableResult
+    private func installAXObserver(for pid: pid_t) -> Bool {
+        if axObservers[pid] != nil { return true }
 
         var observer: AXObserver?
         let result = AXObserverCreate(pid, axObserverCallback, &observer)
-        guard result == .success, let observer = observer else { return }
+        guard result == .success, let observer = observer else { return false }
 
         let axApp = AXUIElementCreateApplication(pid)
-        AXObserverAddNotification(observer, axApp, kAXFocusedWindowChangedNotification as CFString,
-                                  Unmanaged.passUnretained(self).toOpaque())
+        AXUIElementSetMessagingTimeout(axApp, Self.axMessagingTimeout)
+        guard AXObserverAddNotification(observer, axApp, kAXFocusedWindowChangedNotification as CFString,
+                                        Unmanaged.passUnretained(self).toOpaque()) == .success else { return false }
 
         CFRunLoopAddSource(CFRunLoopGetMain(), AXObserverGetRunLoopSource(observer), .commonModes)
         axObservers[pid] = observer
+        return true
+    }
+
+    /// Re-attempts observer installation for all running regular apps. Called
+    /// when Accessibility becomes trusted after launch: registrations made
+    /// pre-grant failed and were not stored, so intra-app focus tracking would
+    /// otherwise stay silently dead until relaunch. Installed pids are skipped.
+    func reinstallAXObservers() {
+        installAXObserversForRunningApps()
     }
 
     /// Remove observer for a terminated app.
@@ -383,11 +463,26 @@ final class WindowModel {
         }
     }
 
-    /// Called from the AXObserver C callback when any app's focused window changes.
+    /// Called from the AXObserver C callback when any app's focused window
+    /// changes. Only the frontmost app may promote: background apps also fire
+    /// kAXFocusedWindowChanged (Electron/Chromium churn, windows closed by
+    /// finished jobs), and an unguarded promote lets them silently steal MRU
+    /// front while the user works elsewhere. AXUIElementGetPid reads the pid
+    /// from the element token — no IPC.
     fileprivate func handleFocusedWindowChanged(_ element: AXUIElement) {
+        var pid: pid_t = 0
+        guard AXUIElementGetPid(element, &pid) == .success,
+              pid == NSWorkspace.shared.frontmostApplication?.processIdentifier else { return }
         var windowID: CGWindowID = 0
         _ = _AXUIElementGetWindow(element, &windowID)
         if windowID != 0 {
+            // An intra-app switch never fires didActivateApplication, so its
+            // pending record is only retired here: a newer focus observation
+            // of a DIFFERENT window supersedes it (the same window confirms
+            // it and must stay for the didActivate consumer).
+            if let pending = pendingActivation, pending.windowID != windowID {
+                pendingActivation = nil
+            }
             mru.promoteToFront(windowID)
         }
     }
@@ -400,7 +495,14 @@ final class WindowModel {
                            object: nil, queue: .main) { [weak self] notification in
             guard let app = notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication,
                   app.activationPolicy == .regular else { return }
-            self?.installAXObserver(for: app.processIdentifier)
+            let pid = app.processIdentifier
+            // A just-launched app's AX server may not accept registrations yet;
+            // retry once after it has had time to come up.
+            if self?.installAXObserver(for: pid) == false {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) { [weak self] in
+                    self?.installAXObserver(for: pid)
+                }
+            }
             AppIconCache.shared.prewarm(pid: app.processIdentifier)
         }
 
