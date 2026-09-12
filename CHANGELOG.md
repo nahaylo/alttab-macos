@@ -5,6 +5,25 @@ All notable changes to AltTab will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.2] - 2026-09-12
+
+### Added
+
+- **Option+Shift+Tab as the initial invoke** now opens the switcher cycling backward: the selection anchors on the least-recently-used window (Windows convention) instead of behaving like a forward invoke, and the mid-session reconcile keeps the backward anchor until the user cycles.
+
+### Fixed
+
+- **Stale switcher after idle**: the window cache was only re-gathered while the switcher was open, so the first invoke after a long pause served a list frozen at the previous session. Focus changes, app activations, launches, and terminations now schedule a debounced (1s) background refresh that keeps the cache warm, rate-limited to one background sweep per 8s under sustained switching (the trailing sweep is pushed back, never dropped), and superseded background sweeps are skipped so they can never delay the switcher's own refresh.
+- **One wedged app erasing its windows' MRU ranks**: a single 0.25s Accessibility timeout during a gather dropped that app's minimized/other-Space windows from the list, pruning their MRU ranks; the next successful gather re-appended them at the tail (far from where the user last saw them). Windows owned by apps that failed the AX pass — including a wedge mid-enumeration after the window list was returned — are now carried over from the previous cache (`GatherMerge`), preserving both panel membership and ranks.
+
+### Changed (performance)
+
+- The per-app Accessibility pass in the window gather runs concurrently instead of sequentially — previously each wedged app stacked its 0.25s timeouts onto the total gather time — and visits apps in sorted-pid order so discovery order is deterministic.
+- `WindowActivator` now sets the Accessibility messaging timeout on each *window* element (timeouts are per-element); previously the unminimize/raise/title calls against a wedged app waited on the ~6s AX default per call, serializing behind one another on the activation queue.
+- The focused-window probe on app activation moved off the main thread (it is synchronous IPC bounded by a 0.25s timeout), so activating a busy app can no longer stall the run loop that services the event tap. A focus-epoch guard drops a late probe result once any newer focus signal has been recorded.
+- The cold-cache path (first Option-Tab before the launch warm-up lands) serves on-screen windows from one WindowServer query instead of running the full synchronous AX gather on the event tap's run loop, which risked the tap being disabled by timeout. That first panel can briefly omit minimized/other-Space windows and titles until the async gather reconciles (~a second).
+- App-icon prewarming resolves icons on a utility queue instead of the main run loop.
+
 ## [1.3.1] - 2026-09-10
 
 ### Fixed
@@ -117,6 +136,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Build/install script with `--system` flag for /Applications
 - Shift-Tab, Arrow keys, Escape, Enter, and mouse click navigation
 
+[1.3.2]: https://github.com/sergio-farfan/alttab-macos/releases/tag/v1.3.2
 [1.3.1]: https://github.com/sergio-farfan/alttab-macos/releases/tag/v1.3.1
 [1.3.0]: https://github.com/sergio-farfan/alttab-macos/releases/tag/v1.3.0
 [1.2.1]: https://github.com/sergio-farfan/alttab-macos/releases/tag/v1.2.1

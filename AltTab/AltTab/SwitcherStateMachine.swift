@@ -17,6 +17,9 @@ import Carbon.HIToolbox
 enum SwitcherAction: Equatable {
     case none
     case activate
+    /// Session opened with Option+Shift+Tab — anchor at the list tail
+    /// (Windows convention: reverse-cycle starts from the least recent).
+    case activateBackward
     case cycleNext
     case cyclePrevious
     case confirm
@@ -40,10 +43,10 @@ struct SwitcherStateMachine {
     /// swallowed (kept from the target app).
     mutating func handleKeyDown(keyCode: Int, optionDown: Bool, shiftDown: Bool) -> (action: SwitcherAction, swallow: Bool) {
         if !isActive {
-            // Option + Tab → activate switcher
+            // Option + Tab → activate switcher; Shift reverses the direction.
             if optionDown && keyCode == kVK_Tab {
                 isActive = true
-                return (.activate, true)
+                return (shiftDown ? .activateBackward : .activate, true)
             }
             return (.none, false)
         }

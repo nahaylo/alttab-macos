@@ -1,8 +1,9 @@
 // swift-tools-version:5.9
 //
-// SPM manifest used ONLY to unit-test the pure-logic core (MRUOrder,
-// SwitcherStateMachine) with `swift test`. The app itself builds through
-// AltTab/AltTab.xcodeproj; the same source files are compiled into both.
+// SPM manifest used ONLY to unit-test the pure-logic core with `swift test`.
+// The `sources:` allow-list below is the authoritative set of files compiled
+// into AltTabCore; the app builds through AltTab/AltTab.xcodeproj and compiles
+// the same files, so they must stay free of AppKit imports.
 //
 import PackageDescription
 
@@ -28,7 +29,8 @@ let package = Package(
                 "Info.plist",
                 "AltTab.entitlements",
             ],
-            sources: ["MRUOrder.swift", "SwitcherStateMachine.swift", "SwitcherSelection.swift", "WCAGContrast.swift"]
+            sources: ["MRUOrder.swift", "SwitcherStateMachine.swift", "SwitcherSelection.swift",
+                      "WCAGContrast.swift", "GatherMerge.swift", "Debouncer.swift"]
         ),
         .testTarget(
             name: "AltTabCoreTests",

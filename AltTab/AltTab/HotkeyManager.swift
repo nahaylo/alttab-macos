@@ -23,7 +23,9 @@ import Carbon.HIToolbox
 // MARK: - Delegate Protocol
 
 protocol HotkeyDelegate: AnyObject {
-    func hotkeyDidActivate()
+    /// `reverse` is true when the session opened with Option+Shift+Tab —
+    /// the initial selection anchors at the list tail instead of slot 1.
+    func hotkeyDidActivate(reverse: Bool)
     func hotkeyDidCycleNext()
     func hotkeyDidCyclePrevious()
     func hotkeyDidConfirm()
@@ -190,7 +192,8 @@ final class HotkeyManager {
         DispatchQueue.main.async { [weak self] in
             guard let delegate = self?.delegate else { return }
             switch action {
-            case .activate: delegate.hotkeyDidActivate()
+            case .activate: delegate.hotkeyDidActivate(reverse: false)
+            case .activateBackward: delegate.hotkeyDidActivate(reverse: true)
             case .cycleNext: delegate.hotkeyDidCycleNext()
             case .cyclePrevious: delegate.hotkeyDidCyclePrevious()
             case .confirm: delegate.hotkeyDidConfirm()

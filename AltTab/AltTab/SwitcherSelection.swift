@@ -32,35 +32,54 @@ struct SwitcherSelection {
     /// reconcile() then follows the selected window instead of re-anchoring.
     private(set) var hasCycled: Bool = false
 
+    /// True when the session opened with Option+Shift+Tab: the anchor sits at
+    /// the list tail, and reconcile() re-anchors with the same direction.
+    private(set) var reverse: Bool = false
+
     /// ID of the highlighted window, if any.
     var selectedID: CGWindowID? {
         windowIDs.indices.contains(selectedIndex) ? windowIDs[selectedIndex] : nil
     }
 
     /// Candidate order for confirming: the selected slot first, then the rest
-    /// in displayed (MRU) order, wrapping. Confirm falls through this order
-    /// past ghost windows — entries closed since the last gather.
+    /// falling through in the session's cycle direction, wrapping. Confirm
+    /// walks this order past ghost windows — entries closed since the last
+    /// gather. Forward sessions fall through in displayed (MRU) order; reverse
+    /// sessions fall through backward, so a ghost at the LRU tail retries the
+    /// next-least-recent window instead of snapping to the focused head.
     var confirmationOrder: [CGWindowID] {
         guard windowIDs.indices.contains(selectedIndex) else { return windowIDs }
+        if reverse {
+            return Array(windowIDs[...selectedIndex].reversed()) + Array(windowIDs[(selectedIndex + 1)...].reversed())
+        }
         return Array(windowIDs[selectedIndex...]) + Array(windowIDs[..<selectedIndex])
     }
 
-    /// The slot the first Tab press should land on. Slot 1 ("previous window")
-    /// is only correct when slot 0 really is the focused window; when the
-    /// focused window is missing from the list (created after the last gather)
-    /// or ranked elsewhere, slot 0 holds the true previous window. An unknown
-    /// focus keeps the classic slot-1 default.
-    static func initialIndex(windowIDs: [CGWindowID], focusedWindowID: CGWindowID?) -> Int {
+    /// The slot the first Tab press should land on. Forward: slot 1 ("previous
+    /// window") is only correct when slot 0 really is the focused window; when
+    /// the focused window is missing from the list (created after the last
+    /// gather) or ranked elsewhere, slot 0 holds the true previous window. An
+    /// unknown focus keeps the classic slot-1 default. Reverse (Option+Shift+
+    /// Tab): one step back from the current window wraps to the least-recently
+    /// -used end — the tail — stepping one further in when the tail IS the
+    /// focused window (selecting it would be a no-op switch).
+    static func initialIndex(windowIDs: [CGWindowID], focusedWindowID: CGWindowID?, reverse: Bool = false) -> Int {
         guard windowIDs.count > 1 else { return 0 }
+        if reverse {
+            let last = windowIDs.count - 1
+            if let focused = focusedWindowID, windowIDs[last] == focused { return last - 1 }
+            return last
+        }
         guard let focused = focusedWindowID else { return 1 }
         return windowIDs[0] == focused ? 1 : 0
     }
 
     /// Starts a session: anchors the selection against the actual focused window.
-    mutating func activate(windowIDs: [CGWindowID], focusedWindowID: CGWindowID?) {
+    mutating func activate(windowIDs: [CGWindowID], focusedWindowID: CGWindowID?, reverse: Bool = false) {
         self.windowIDs = windowIDs
+        self.reverse = reverse
         hasCycled = false
-        selectedIndex = Self.initialIndex(windowIDs: windowIDs, focusedWindowID: focusedWindowID)
+        selectedIndex = Self.initialIndex(windowIDs: windowIDs, focusedWindowID: focusedWindowID, reverse: reverse)
     }
 
     mutating func cycleNext() {
@@ -100,7 +119,7 @@ struct SwitcherSelection {
                 selectedIndex = min(previousIndex, fresh.count - 1)
             }
         } else {
-            selectedIndex = Self.initialIndex(windowIDs: fresh, focusedWindowID: focusedWindowID)
+            selectedIndex = Self.initialIndex(windowIDs: fresh, focusedWindowID: focusedWindowID, reverse: reverse)
         }
     }
 }

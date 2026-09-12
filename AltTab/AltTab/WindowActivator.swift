@@ -86,6 +86,10 @@ enum WindowActivator {
               let axWindows = windowsRef as? [AXUIElement] else { return }
 
         for axWindow in axWindows {
+            // Timeouts are per-element: without this, the setter below waits
+            // on the ~6s AX default against a wedged app (the app-element
+            // timeout above does not carry over).
+            AXUIElementSetMessagingTimeout(axWindow, axMessagingTimeout)
             var windowID: CGWindowID = 0
             _ = _AXUIElementGetWindow(axWindow, &windowID)
 
@@ -107,6 +111,9 @@ enum WindowActivator {
 
         // Try to match by CGWindowID first
         for axWindow in axWindows {
+            // Per-element timeout: covers the raise/main/title calls below on
+            // these same elements (the fallback loop reuses this array).
+            AXUIElementSetMessagingTimeout(axWindow, axMessagingTimeout)
             var windowID: CGWindowID = 0
             _ = _AXUIElementGetWindow(axWindow, &windowID)
 

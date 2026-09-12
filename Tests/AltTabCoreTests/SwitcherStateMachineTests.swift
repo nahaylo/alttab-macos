@@ -24,6 +24,25 @@ final class SwitcherStateMachineTests: XCTestCase {
         XCTAssertTrue(machine.isActive)
     }
 
+    func testOptionShiftTabActivatesBackwardAndSwallows() {
+        var machine = SwitcherStateMachine()
+        let result = machine.handleKeyDown(keyCode: kVK_Tab, optionDown: true, shiftDown: true)
+        XCTAssertEqual(result.action, SwitcherAction.activateBackward)
+        XCTAssertTrue(result.swallow)
+        XCTAssertTrue(machine.isActive)
+        // The backward session behaves like any other: Option release confirms.
+        XCTAssertEqual(machine.handleFlagsChanged(optionDown: false), SwitcherAction.confirm)
+        XCTAssertFalse(machine.isActive)
+    }
+
+    func testShiftAloneDoesNotChangeActivationKey() {
+        var machine = SwitcherStateMachine()
+        let result = machine.handleKeyDown(keyCode: kVK_Tab, optionDown: false, shiftDown: true)
+        XCTAssertEqual(result.action, SwitcherAction.none)
+        XCTAssertFalse(result.swallow)
+        XCTAssertFalse(machine.isActive)
+    }
+
     func testTabWithoutOptionPassesThroughWhenIdle() {
         var machine = SwitcherStateMachine()
         let result = machine.handleKeyDown(keyCode: kVK_Tab, optionDown: false, shiftDown: false)

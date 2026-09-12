@@ -65,6 +65,78 @@ final class SwitcherSelectionTests: XCTestCase {
         XCTAssertEqual(selection.selectedID, 5)
     }
 
+    // MARK: - Reverse activation (Option+Shift+Tab)
+
+    func testReverseAnchorsAtTailWhenSlotZeroIsFocused() {
+        // One step back from the current window wraps to the LRU end.
+        let index = SwitcherSelection.initialIndex(windowIDs: [1, 2, 3], focusedWindowID: 1, reverse: true)
+        XCTAssertEqual(index, 2)
+    }
+
+    func testReverseAnchorsAtTailWhenFocusUnknown() {
+        let index = SwitcherSelection.initialIndex(windowIDs: [1, 2, 3], focusedWindowID: nil, reverse: true)
+        XCTAssertEqual(index, 2)
+    }
+
+    func testReverseAnchorsAtTailWhenFocusedWindowMissingFromList() {
+        // Stale cache: the focused window is uncached; backward from the
+        // (absent) current window still lands on the LRU end.
+        let index = SwitcherSelection.initialIndex(windowIDs: [1, 2, 3], focusedWindowID: 9, reverse: true)
+        XCTAssertEqual(index, 2)
+    }
+
+    func testReverseStepsPastFocusedWindowAtTail() {
+        // Selecting the focused window itself would be a no-op switch.
+        let index = SwitcherSelection.initialIndex(windowIDs: [1, 2, 3], focusedWindowID: 3, reverse: true)
+        XCTAssertEqual(index, 1)
+    }
+
+    func testReverseSingleAndEmptyListsAnchorAtSlotZero() {
+        XCTAssertEqual(SwitcherSelection.initialIndex(windowIDs: [1], focusedWindowID: 1, reverse: true), 0)
+        XCTAssertEqual(SwitcherSelection.initialIndex(windowIDs: [], focusedWindowID: nil, reverse: true), 0)
+    }
+
+    func testReverseActivateAnchorsAndContinuesBackward() {
+        var selection = SwitcherSelection()
+        selection.activate(windowIDs: [1, 2, 3], focusedWindowID: 1, reverse: true)
+        XCTAssertTrue(selection.reverse)
+        XCTAssertEqual(selection.selectedIndex, 2)
+        // Holding Option+Shift, another Tab cycles further backward.
+        selection.cyclePrevious()
+        XCTAssertEqual(selection.selectedIndex, 1)
+    }
+
+    func testReverseReconcileReanchorsAtTailBeforeCycle() {
+        // Stale cache [2, 1] with focused window 2; reverse anchors at 1.
+        // The fresh gather reveals a new window: the anchor must move to the
+        // fresh list's tail, not follow the provisional pick's ID.
+        var selection = SwitcherSelection()
+        selection.activate(windowIDs: [2, 1], focusedWindowID: 2, reverse: true)
+        XCTAssertEqual(selection.selectedID, 1)
+
+        selection.reconcile(windowIDs: [3, 2, 1, 0], focusedWindowID: 3)
+        XCTAssertEqual(selection.selectedIndex, 3)
+        XCTAssertEqual(selection.selectedID, 0)
+    }
+
+    func testReverseReconcileFollowsWindowAfterCycle() {
+        var selection = SwitcherSelection()
+        selection.activate(windowIDs: [1, 2, 3], focusedWindowID: 1, reverse: true)
+        selection.cyclePrevious() // index 1, window 2
+        selection.reconcile(windowIDs: [9, 1, 2, 3], focusedWindowID: 9)
+        XCTAssertEqual(selection.selectedID, 2)
+        XCTAssertEqual(selection.selectedIndex, 2)
+    }
+
+    func testForwardActivateResetsReverseFlag() {
+        var selection = SwitcherSelection()
+        selection.activate(windowIDs: [1, 2], focusedWindowID: 1, reverse: true)
+        XCTAssertTrue(selection.reverse)
+        selection.activate(windowIDs: [1, 2], focusedWindowID: 1)
+        XCTAssertFalse(selection.reverse)
+        XCTAssertEqual(selection.selectedIndex, 1)
+    }
+
     // MARK: - Cycling
 
     func testCycleNextWrapsAround() {
@@ -222,5 +294,40 @@ final class SwitcherSelectionTests: XCTestCase {
     func testConfirmationOrderOnEmptyListIsEmpty() {
         let selection = SwitcherSelection()
         XCTAssertEqual(selection.confirmationOrder, [])
+    }
+
+    func testReverseConfirmationOrderFallsThroughBackward() {
+        // Anchored at the LRU tail: a ghost there must retry the next-least-
+        // recent window, not snap to the focused head.
+        var selection = SwitcherSelection()
+        selection.activate(windowIDs: [1, 2, 3], focusedWindowID: 1, reverse: true)
+        XCTAssertEqual(selection.selectedIndex, 2)
+        XCTAssertEqual(selection.confirmationOrder, [3, 2, 1])
+    }
+
+    func testReverseConfirmationOrderWithFocusedWindowAtTail() {
+        // Anchor stepped to last-1; the focused tail window is tried last.
+        var selection = SwitcherSelection()
+        selection.activate(windowIDs: [1, 2, 3], focusedWindowID: 3, reverse: true)
+        XCTAssertEqual(selection.selectedIndex, 1)
+        XCTAssertEqual(selection.confirmationOrder, [2, 1, 3])
+    }
+
+    func testReverseConfirmationOrderAtHeadWrapsToTail() {
+        // Cycled to the head in a reverse session: fall-through continues
+        // backward, wrapping to the tail (bounds of the second slice).
+        var selection = SwitcherSelection()
+        selection.activate(windowIDs: [1, 2, 3, 4], focusedWindowID: 1, reverse: true)
+        selection.cyclePrevious() // 3 -> 2
+        selection.cyclePrevious() // 2 -> 1
+        selection.cyclePrevious() // 1 -> 0
+        XCTAssertEqual(selection.selectedIndex, 0)
+        XCTAssertEqual(selection.confirmationOrder, [1, 4, 3, 2])
+    }
+
+    func testReverseConfirmationOrderSingleElement() {
+        var selection = SwitcherSelection()
+        selection.activate(windowIDs: [7], focusedWindowID: 7, reverse: true)
+        XCTAssertEqual(selection.confirmationOrder, [7])
     }
 }

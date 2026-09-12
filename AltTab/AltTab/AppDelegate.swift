@@ -117,14 +117,19 @@ class AppDelegate: NSObject, NSApplicationDelegate, HotkeyDelegate {
 
     // MARK: - HotkeyDelegate
 
-    func hotkeyDidActivate() {
+    func hotkeyDidActivate(reverse: Bool) {
         switchSession += 1
         let session = switchSession
 
         currentWindows = windowModel.windowsFromCache()
         guard !currentWindows.isEmpty else {
-            // Nothing to show — end the tap session so Tab isn't swallowed dead.
+            // Nothing to show — end the tap session so Tab isn't swallowed
+            // dead, and kick a gather so an immediate retry can succeed (a
+            // cold launch with zero on-screen windows serves an empty list).
+            // Coalescible: its completion drives nothing, so mashed retries
+            // must not backlog the serial gather queue.
             hotkeyManager.cancelSession()
+            windowModel.refreshWindows(coalescible: true) { _ in }
             return
         }
         // Anchor against the actual focused window: the cache can be stale
@@ -133,7 +138,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, HotkeyDelegate {
         // slot-1 anchor would jump one slot too far.
         sessionFocusedID = windowModel.frontmostWindowID()
         selection.activate(windowIDs: currentWindows.map { $0.windowID },
-                           focusedWindowID: sessionFocusedID)
+                           focusedWindowID: sessionFocusedID,
+                           reverse: reverse)
         switcherActive = true
         switcherPanel.show(windows: currentWindows, selectedIndex: selection.selectedIndex)
 
