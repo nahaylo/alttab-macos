@@ -83,8 +83,8 @@ Then grant **Accessibility** permission when prompted (System Settings → Priva
 
 | Requirement | Details |
 |-------------|---------|
-| **macOS** | 13.0+ (Ventura, Sonoma, Sequoia) |
-| **Xcode** | Full install from App Store (not just Command Line Tools) |
+| **macOS** | 13.0+ (Ventura or newer) to run |
+| **Xcode** | 26 or newer to build from source (the code references `NSGlassEffectView`, which only exists in the macOS 26 SDK); full install from App Store, not just Command Line Tools |
 
 <details>
 <summary>First time with Xcode?</summary>
