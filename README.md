@@ -43,7 +43,7 @@ Open the `.dmg`, drag **AltTab** to **Applications**, and launch it. Grant **Acc
 brew install --cask sergio-farfan/tap/alttab
 ```
 
-The fully qualified name trusts just this cask (Homebrew 6+ requires third-party taps to be trusted before their code runs). To use the short name instead, run `brew trust sergio-farfan/tap && brew tap sergio-farfan/tap` first, then `brew install --cask alttab`. Update later with `brew upgrade --cask alttab`.
+The fully qualified name trusts just this cask (Homebrew 6+ requires third-party taps to be trusted before their code runs). To use the short name instead, run `brew trust sergio-farfan/tap && brew tap sergio-farfan/tap` first, then `brew install --cask alttab`. Update later with `brew upgrade --cask alttab` — until releases are notarized, each upgrade of this ad-hoc-signed build needs the **Open Anyway** step once more (Homebrew only carries a Gatekeeper approval forward when the signing identity is stable).
 
 Prefer to build it yourself? See [Build from source](#build-from-source).
 
