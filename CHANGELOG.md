@@ -5,6 +5,16 @@ All notable changes to AltTab will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **Homebrew install**: `brew install --cask sergio-farfan/tap/alttab`, via the new [`sergio-farfan/homebrew-tap`](https://github.com/sergio-farfan/homebrew-tap). The release workflow notifies the tap so the cask follows each release automatically once the `TAP_DISPATCH_TOKEN` secret is configured.
+
+### Changed
+
+- First-launch guidance for the unsigned build follows Apple's current flow (System Settings → Privacy & Security → **Open Anyway**); right-click → Open no longer bypasses Gatekeeper on recent macOS.
+
 ## [1.3.2] - 2026-09-12
 
 ### Added
@@ -136,6 +146,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Build/install script with `--system` flag for /Applications
 - Shift-Tab, Arrow keys, Escape, Enter, and mouse click navigation
 
+[Unreleased]: https://github.com/sergio-farfan/alttab-macos/compare/v1.3.2...HEAD
 [1.3.2]: https://github.com/sergio-farfan/alttab-macos/releases/tag/v1.3.2
 [1.3.1]: https://github.com/sergio-farfan/alttab-macos/releases/tag/v1.3.1
 [1.3.0]: https://github.com/sergio-farfan/alttab-macos/releases/tag/v1.3.0

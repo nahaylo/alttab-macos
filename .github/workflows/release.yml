@@ -17,11 +17,15 @@ permissions:
 #   MACOS_CERTIFICATE_P12_BASE64  base64 of the Developer ID Application .p12
 #   MACOS_CERTIFICATE_PASSWORD    password protecting that .p12
 #   KEYCHAIN_PASSWORD             any string; password for the ephemeral keychain
-#   APPLE_TEAM_ID                 10-char Apple Developer Team ID
 #   APPLE_API_KEY_ID              App Store Connect API key id (notarytool)
 #   APPLE_API_ISSUER_ID          App Store Connect issuer id (notarytool)
 #   APPLE_API_KEY_P8_BASE64      base64 of the AuthKey_XXXX.p8
-# When MACOS_CERTIFICATE_P12_BASE64 exists, builds are signed + notarized.
+# When MACOS_CERTIFICATE_P12_BASE64 exists, builds are signed + notarized —
+# set ALL of the above together, or none.
+#
+# The Homebrew tap bump is DORMANT until this repository secret is set:
+#   TAP_DISPATCH_TOKEN            fine-grained PAT scoped to sergio-farfan/homebrew-tap
+#                                 with "Contents: Read and write" (repository_dispatch)
 # ---------------------------------------------------------------------------
 
 jobs:
@@ -144,9 +148,9 @@ jobs:
               echo ""
               echo "---"
               echo "### Unsigned build"
-              echo "Not yet notarized. On first launch, right-click **AltTab.app -> Open**, or clear quarantine:"
+              echo 'Not yet notarized. On first launch macOS blocks the app: open **System Settings -> Privacy & Security**, click **Open Anyway**, then launch again (or clear the quarantine flag: `xattr -dr com.apple.quarantine /Applications/AltTab.app`).'
               echo ""
-              echo "    xattr -dr com.apple.quarantine /Applications/AltTab.app"
+              echo 'Homebrew: `brew install --cask sergio-farfan/tap/alttab`'
             } >> notes.md
           fi
 
@@ -163,6 +167,22 @@ jobs:
             gh release create "$TAG" "dist/AltTab-$VERSION.dmg" "dist/AltTab-$VERSION.dmg.sha256" \
               --title "AltTab $VERSION" --notes-file notes.md
           fi
+
+      - name: Notify Homebrew tap
+        if: steps.meta.outputs.publish == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.TAP_DISPATCH_TOKEN }}
+          VERSION: ${{ steps.meta.outputs.version }}
+        run: |
+          if [ -z "$GH_TOKEN" ]; then
+            echo "TAP_DISPATCH_TOKEN not set -> skipping Homebrew tap bump; bump sergio-farfan/homebrew-tap by hand."
+            exit 0
+          fi
+          SHA="$(cut -d' ' -f1 "dist/AltTab-$VERSION.dmg.sha256")"
+          jq -n --arg v "$VERSION" --arg s "$SHA" \
+            '{event_type: "alttab-release", client_payload: {cask: "alttab", version: $v, sha256: $s}}' \
+            | gh api "repos/sergio-farfan/homebrew-tap/dispatches" --input -
+          echo "Dispatched alttab-release $VERSION to sergio-farfan/homebrew-tap"
 
       - name: Upload dry-run artifact
         if: steps.meta.outputs.publish != 'true'

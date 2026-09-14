@@ -35,13 +35,15 @@ macOS Cmd-Tab switches between *applications*. AltTab switches between *windows*
 Open the `.dmg`, drag **AltTab** to **Applications**, and launch it. Grant **Accessibility** when prompted (System Settings → Privacy & Security → Accessibility).
 
 <!-- UNSIGNED-NOTE: remove this block once notarized builds ship. -->
-> This build is not yet notarized. On first launch, right-click **AltTab.app → Open**, or run `xattr -dr com.apple.quarantine /Applications/AltTab.app`.
+> This build is not yet notarized. On first launch macOS blocks it: open **System Settings → Privacy & Security**, click **Open Anyway**, and launch again (or clear the quarantine flag with `xattr -dr com.apple.quarantine /Applications/AltTab.app`).
 
-**Homebrew** *(coming soon)*:
+**Homebrew**:
 
 ```bash
 brew install --cask sergio-farfan/tap/alttab
 ```
+
+The fully qualified name trusts just this cask (Homebrew 6+ requires third-party taps to be trusted before their code runs). To use the short name instead, run `brew trust sergio-farfan/tap && brew tap sergio-farfan/tap` first, then `brew install --cask alttab`. Update later with `brew upgrade --cask alttab`.
 
 Prefer to build it yourself? See [Build from source](#build-from-source).
 
