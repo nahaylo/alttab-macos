@@ -17,6 +17,12 @@
     <img src="Screenshots/demo.gif" alt="AltTab in action" width="640">
 -->
 <p align="center">
+  <img src="Screenshots/switcher.jpg" alt="AltTab switcher in action — Option-Tab cycling through every open window" width="900">
+</p>
+<p align="center">
+  <em>One Option-Tab: every open window, most-recent first, on the screen where your mouse is.</em>
+</p>
+<p align="center">
   <img src="Screenshots/menu.png" alt="AltTab menu bar menu" width="320">
 </p>
 
