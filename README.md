@@ -49,7 +49,7 @@ Prefer to build it yourself? See [Build from source](#build-from-source).
 
 [`lwouis/alttab`](https://github.com/lwouis/alttab) is the feature-rich, highly configurable incumbent. This project is the deliberately minimal alternative:
 
-- **Tiny and auditable** — ~2,000 lines of pure Swift + AppKit, single purpose.
+- **Tiny and auditable** — ~2,700 lines of pure Swift + AppKit, single purpose.
 - **Zero dependencies** — no packages, no frameworks bundled.
 - **No Screen Recording permission** — titles via the Accessibility API, app icons instead of live thumbnails (avoids the recurring macOS 15 recording prompt). Live window previews are available as a strictly opt-in toggle on macOS 14+.
 - **Windows-style Option-Tab** semantics with menu-bar-only footprint (no Dock icon).
@@ -59,20 +59,20 @@ If you want extensive customization, use lwouis/alttab. If you want something sm
 ## Features
 
 - **Option-Tab** to activate, cycle with Tab, confirm on release
-- **Shift-Tab** / Arrow keys to navigate in reverse
+- **Shift-Tab** / Arrow keys to navigate in reverse — and **Option-Shift-Tab** opens the switcher already cycling backward, anchored on the least-recently-used window (new in 1.3.2)
 - **Escape** to cancel without switching
-- **Instant response** — window-raise runs off the main thread and app icons are cached, so the switcher appears immediately
+- **Instant response** — the window list is kept warm by a debounced background refresh between invocations, window-raise runs off the main thread, and app icons are cached, so the switcher appears immediately with fresh contents even after hours of idle (1.3.2)
 - Window titles via Accessibility API — works for all apps without Screen Recording permission
 - App icon display with graceful fallback (no Screen Recording prompt on macOS 15+)
 - Includes minimized windows, ⌘H-hidden apps, and windows on other Spaces
 - Optional live window previews (ScreenCaptureKit, macOS 14+, opt-in from the menu)
 - Appearance override (System / Light / Dark) and background styles: Solid (default), Transparent, or native Liquid Glass (macOS 26+)
 - Multi-monitor aware — the switcher opens on the screen with the mouse pointer
-- MRU (most recently used) ordering with intra-app focus tracking
+- MRU (most recently used) ordering with intra-app focus tracking — resilient to busy apps: a wedged app's Accessibility timeout can't drop its windows from the list or scramble their order (1.3.2)
 - Menu bar utility — no Dock icon, no clutter
 - Launch at Login support (macOS 13+ SMAppService)
 - Zero dependencies — pure Swift + AppKit
-- ~2,000 lines of code, single-purpose, auditable
+- ~2,700 lines of code, single-purpose, auditable (83 unit tests on the pure-logic core)
 
 ## Build from source
 
@@ -163,6 +163,7 @@ open ~/Applications/AltTab.app   # or /Applications — grant again when prompte
 | Shortcut | Action |
 |----------|--------|
 | <kbd>Option</kbd> + <kbd>Tab</kbd> | Open switcher, select next window |
+| <kbd>Option</kbd> + <kbd>Shift</kbd> + <kbd>Tab</kbd> | Open switcher cycling backward (least-recent window first) |
 | <kbd>Tab</kbd> | Cycle forward (while holding Option) |
 | <kbd>Shift</kbd> + <kbd>Tab</kbd> | Cycle backward |
 | <kbd>←</kbd> <kbd>→</kbd> | Navigate left / right |
@@ -173,7 +174,7 @@ open ~/Applications/AltTab.app   # or /Applications — grant again when prompte
 
 ## How It Works
 
-AltTab installs a **CGEvent tap** at the session level to intercept keyboard events globally. A 3-state machine (idle → active → idle) tracks Option hold/release and Tab presses. The event tap includes retry logic with exponential backoff to handle the case where the Accessibility subsystem isn't ready at login time. Window enumeration combines `CGWindowListCopyWindowInfo` (on-screen windows) with `AXUIElement` queries (minimized windows). Window titles are read via `AXUIElement` (`kAXTitleAttribute`), which only requires Accessibility permission — no Screen Recording needed. MRU order is maintained via `NSWorkspace` activation notifications and per-app `AXObserver` callbacks that track focused-window changes — including intra-app switches like Cmd-\`.
+AltTab installs a **CGEvent tap** at the session level to intercept keyboard events globally. A 3-state machine (idle → active → idle) tracks Option hold/release and Tab presses. The event tap includes retry logic with exponential backoff to handle the case where the Accessibility subsystem isn't ready at login time. Window enumeration combines `CGWindowListCopyWindowInfo` (on-screen windows) with `AXUIElement` queries (minimized windows). Window titles are read via `AXUIElement` (`kAXTitleAttribute`), which only requires Accessibility permission — no Screen Recording needed. MRU order is maintained via `NSWorkspace` activation notifications and per-app `AXObserver` callbacks that track focused-window changes — including intra-app switches like Cmd-\`. Between invocations, those same events schedule a debounced, rate-limited background re-gather, so the cached window list the switcher opens from is never stale — even on the first Option-Tab after hours of idle.
 
 The switcher UI is a **non-activating NSPanel** (`.nonactivatingPanel` style mask) so it floats above all windows without stealing focus. App icons are displayed for each window, served from an in-memory cache (prewarmed at launch) so the panel paints immediately instead of resolving each icon through LaunchServices on the fly. Window activation uses `AXUIElement` to raise the specific window and unminimize if needed; that synchronous AX IPC runs on a background queue with a bounded messaging timeout, so a slow target app can't block the main thread (and stall the switcher).
 
@@ -185,8 +186,11 @@ AltTab/AltTab/
 ├── AppDelegate.swift           # Lifecycle, menu bar status item, orchestration, session epochs
 ├── HotkeyManager.swift         # CGEvent tap plumbing; decodes events for the state machine
 ├── SwitcherStateMachine.swift  # Pure Option-Tab session state machine (unit-tested)
-├── WindowModel.swift           # CGWindowList + single AX pass per app, cache + async refresh
+├── SwitcherSelection.swift     # Pure per-session selection: initial anchor, cycling, reconcile (unit-tested)
+├── WindowModel.swift           # CGWindowList + concurrent AX pass per app, warm cache + async refresh
 ├── MRUOrder.swift              # Pure MRU ordering (unit-tested)
+├── GatherMerge.swift           # Pure carry-over policy for lossy AX gathers (unit-tested)
+├── Debouncer.swift             # Trailing-edge debouncer for the background cache refresh (unit-tested)
 ├── WindowCapture.swift         # Opt-in ScreenCaptureKit window previews (macOS 14+)
 ├── SwitcherPanel.swift         # NSPanel overlay with selectable background (solid / HUD / Liquid Glass)
 ├── ThumbnailView.swift         # Individual window cell (preview/icon + title + app name)
