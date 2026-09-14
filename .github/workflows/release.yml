@@ -8,6 +8,10 @@ on:
       version:
         description: 'Version to build for a dry run, e.g. 1.1.1 (no Release published)'
         required: true
+      notify_tap:
+        description: 'Also send the Homebrew tap dispatch — exercises TAP_DISPATCH_TOKEN without a release (use the CURRENT released version so the tap no-ops)'
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -169,7 +173,10 @@ jobs:
           fi
 
       - name: Notify Homebrew tap
-        if: steps.meta.outputs.publish == 'true'
+        # Real releases always notify; a dry run only when asked (notify_tap). The tap's
+        # bump workflow validates the release asset before pushing, so a dry-run dispatch
+        # for an unreleased version cannot bump the cask — it just fails there.
+        if: steps.meta.outputs.publish == 'true' || inputs.notify_tap == true
         env:
           GH_TOKEN: ${{ secrets.TAP_DISPATCH_TOKEN }}
           VERSION: ${{ steps.meta.outputs.version }}
