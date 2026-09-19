@@ -10,8 +10,8 @@
 //  Attached to the NSStatusItem created by AppDelegate.
 //
 //  Author:  Sergio Farfan <sergio.farfan@gmail.com>
-//  Version: 1.3.0
-//  Date:    2026-07-02
+//  Version: 1.3.3
+//  Date:    2026-09-19
 //  License: MIT
 //
 
