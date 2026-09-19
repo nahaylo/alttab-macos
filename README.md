@@ -68,7 +68,7 @@ If you want extensive customization, use lwouis/alttab. If you want something sm
 - App icon display with graceful fallback (no Screen Recording prompt on macOS 15+)
 - Includes minimized windows, ⌘H-hidden apps, and windows on other Spaces
 - Optional live window previews (ScreenCaptureKit, macOS 14+, opt-in from the menu)
-- Appearance override (System / Light / Dark) and background styles: Solid (default), Transparent, or native Liquid Glass (macOS 26+)
+- Appearance override (System / Light / Dark) and background styles: Solid (default), Transparent, or native Liquid Glass (macOS 26+) with a **Glass Strength** setting — Light / Medium / High / Max
 - Multi-monitor aware — the switcher opens on the screen with the mouse pointer
 - MRU (most recently used) ordering with intra-app focus tracking — resilient to busy apps: a wedged app's Accessibility timeout can't drop its windows from the list or scramble their order (1.3.2)
 - Menu bar utility — no Dock icon, no clutter

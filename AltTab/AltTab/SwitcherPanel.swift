@@ -34,6 +34,14 @@ final class SwitcherPanel: NSPanel {
     /// "transparent", or "glass".
     static let backgroundDefaultsKey = "BackgroundStyle"
 
+    /// UserDefaults key for the Liquid Glass strength: absent/"high" (the
+    /// original look), "light", "medium", or "max". Only used with "glass".
+    static let glassStrengthDefaultsKey = "GlassStrength"
+
+    private static func currentGlassStrength() -> GlassStrength {
+        GlassStrength.resolve(UserDefaults.standard.string(forKey: glassStrengthDefaultsKey))
+    }
+
     private enum BackgroundStyle: String {
         case solid, transparent, glass
 
@@ -51,6 +59,7 @@ final class SwitcherPanel: NSPanel {
     }
 
     private var installedStyle: BackgroundStyle?
+    private var installedGlassStrength: GlassStrength?
 
     private let itemWidth: CGFloat = 180
     private let itemHeight: CGFloat = 160
@@ -108,7 +117,7 @@ final class SwitcherPanel: NSPanel {
             stackView.heightAnchor.constraint(equalToConstant: itemHeight),
         ])
 
-        installBackground(BackgroundStyle.current())
+        installBackground(BackgroundStyle.current(), glassStrength: Self.currentGlassStrength())
     }
 
     /// The opaque, appearance-adaptive plate whose label contrast the
@@ -125,17 +134,47 @@ final class SwitcherPanel: NSPanel {
         return box
     }
 
-    /// Re-installs the background root only when the preference changed.
+    /// The glass view's content host, which doubles as the strength plate: a
+    /// translucent window-background fill over the glass tones the effect down
+    /// (Light / Medium); with alpha 0 (High / Max) it is a plain transparent
+    /// view. The fill is a dynamic color so it re-resolves on Light/Dark
+    /// changes — withAlphaComponent() on the catalog color directly would
+    /// freeze whichever appearance is current at creation time.
+    private static func makeGlassHost(plateAlpha: CGFloat) -> NSView {
+        guard plateAlpha > 0 else {
+            let host = NSView()
+            host.translatesAutoresizingMaskIntoConstraints = false
+            return host
+        }
+        let plate = NSBox()
+        plate.boxType = .custom
+        plate.titlePosition = .noTitle
+        plate.fillColor = NSColor(name: nil) { appearance in
+            var color = NSColor.windowBackgroundColor
+            appearance.performAsCurrentDrawingAppearance {
+                color = NSColor.windowBackgroundColor.withAlphaComponent(plateAlpha)
+            }
+            return color
+        }
+        plate.borderWidth = 0
+        plate.cornerRadius = 16
+        plate.contentViewMargins = .zero
+        plate.translatesAutoresizingMaskIntoConstraints = false
+        return plate
+    }
+
+    /// Re-installs the background root only when a preference changed.
     private func installBackgroundIfNeeded() {
         let style = BackgroundStyle.current()
-        if style != installedStyle {
-            installBackground(style)
+        let strength = Self.currentGlassStrength()
+        if style != installedStyle || (style == .glass && strength != installedGlassStrength) {
+            installBackground(style, glassStrength: strength)
         }
     }
 
     /// Builds the root view for the style and re-parents the persistent
     /// scroll view into it with the standard panel padding.
-    private func installBackground(_ style: BackgroundStyle) {
+    private func installBackground(_ style: BackgroundStyle, glassStrength: GlassStrength) {
         scrollView.removeFromSuperview()
 
         let root: NSView
@@ -171,11 +210,13 @@ final class SwitcherPanel: NSPanel {
                 // edge-to-edge internally; the explicit constraints below are
                 // deliberate agreeing duplicates of that undocumented
                 // behavior — re-examine on major OS updates.
+                // No intensity API exists, so the strength preference maps onto
+                // the two knobs there are: the clear style for Max, and the
+                // host's translucent plate for Light / Medium (see GlassStrength).
                 let glass = NSGlassEffectView()
                 glass.cornerRadius = 16
-                glass.style = .regular
-                let host = NSView()
-                host.translatesAutoresizingMaskIntoConstraints = false
+                glass.style = glassStrength.usesClearStyle ? .clear : .regular
+                let host = Self.makeGlassHost(plateAlpha: glassStrength.plateAlpha)
                 glass.contentView = host
                 NSLayoutConstraint.activate([
                     host.topAnchor.constraint(equalTo: glass.topAnchor),
@@ -203,6 +244,7 @@ final class SwitcherPanel: NSPanel {
             scrollView.trailingAnchor.constraint(equalTo: scrollHost.trailingAnchor, constant: -panelPadding),
         ])
         installedStyle = style
+        installedGlassStrength = glassStrength
     }
 
     // MARK: - Public API

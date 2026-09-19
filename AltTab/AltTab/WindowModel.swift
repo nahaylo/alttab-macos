@@ -291,14 +291,18 @@ final class WindowModel {
         let selfPID = self.selfPID
         let generation = gatherGeneration.next()
         let generationBox = gatherGeneration
-        gatherQueue.async {
+        // Weak at the OUTER closure: the gather must not keep the model alive, and
+        // an inner-only [weak self] would make this closure capture self strongly
+        // just to hand it over. `WindowModel.` rather than `Self.` for the same
+        // reason — in a class body `Self` is the dynamic type, i.e. a self capture.
+        gatherQueue.async { [weak self] in
             // A background sweep that a newer request has already superseded
             // would only produce data the next gather immediately replaces —
             // skip it so the newest request starts sooner. Never skipped for
             // activation refreshes: their completion drives the session.
             if coalescible && generation != generationBox.current { return }
-            let result = Self.gatherWindows(regularApps: apps, selfPID: selfPID)
-            DispatchQueue.main.async { [weak self] in
+            let result = WindowModel.gatherWindows(regularApps: apps, selfPID: selfPID)
+            DispatchQueue.main.async {
                 guard let self = self else { return }
                 self.lastGatherFinished = Date()
                 let merged = GatherMerge.merge(previous: self.cachedWindows,

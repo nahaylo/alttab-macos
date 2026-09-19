@@ -30,7 +30,7 @@ let package = Package(
                 "AltTab.entitlements",
             ],
             sources: ["MRUOrder.swift", "SwitcherStateMachine.swift", "SwitcherSelection.swift",
-                      "WCAGContrast.swift", "GatherMerge.swift", "Debouncer.swift"]
+                      "WCAGContrast.swift", "GatherMerge.swift", "Debouncer.swift", "GlassStrength.swift"]
         ),
         .testTarget(
             name: "AltTabCoreTests",

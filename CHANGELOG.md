@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Glass Strength** (status menu, macOS 26+): Light / Medium / High / Max for the Liquid Glass background. `NSGlassEffectView` has no intensity API, so the levels are emulated: **High** is the previous look (regular glass), **Light** and **Medium** lay an appearance-adaptive translucent plate over the glass, and **Max** switches to the clear glass style. Applies on the next Option-Tab, no relaunch; the submenu is greyed out unless the Background is Liquid Glass.
 - **Homebrew install**: `brew install --cask sergio-farfan/tap/alttab`, via the new [`sergio-farfan/homebrew-tap`](https://github.com/sergio-farfan/homebrew-tap). The release workflow notifies the tap so the cask follows each release automatically once the `TAP_DISPATCH_TOKEN` secret is configured.
 
 ### Changed

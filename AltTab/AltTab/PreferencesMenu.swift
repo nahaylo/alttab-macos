@@ -22,8 +22,15 @@ final class PreferencesMenu {
 
     let menu: NSMenu
 
+    /// The "Glass Strength" submenu's parent item — greyed out unless the
+    /// Background is Liquid Glass, which is the only style it affects.
+    private var glassStrengthItem: NSMenuItem?
+
     init() {
         menu = NSMenu()
+        // Manual enablement so the Glass Strength parent can be greyed out;
+        // every other top-level item keeps its default enabled state.
+        menu.autoenablesItems = false
 
         let launchItem = NSMenuItem(title: "Launch at Login",
                                     action: #selector(toggleLaunchAtLogin(_:)),
@@ -63,6 +70,24 @@ final class PreferencesMenu {
         backgroundItem.submenu = backgroundMenu
         menu.addItem(backgroundItem)
         refreshBackgroundChecks(in: backgroundMenu)
+
+        if #available(macOS 26.0, *) {
+            let strengthItem = NSMenuItem(title: "Glass Strength", action: nil, keyEquivalent: "")
+            let strengthMenu = NSMenu()
+            for level in GlassStrength.allCases {
+                let item = NSMenuItem(title: level.title,
+                                      action: #selector(selectGlassStrength(_:)),
+                                      keyEquivalent: "")
+                item.target = self
+                item.representedObject = level.rawValue
+                strengthMenu.addItem(item)
+            }
+            strengthItem.submenu = strengthMenu
+            menu.addItem(strengthItem)
+            glassStrengthItem = strengthItem
+            refreshGlassStrengthChecks(in: strengthMenu)
+            updateGlassStrengthEnabled()
+        }
 
         if #available(macOS 14.0, *) {
             let previewsItem = NSMenuItem(title: "Show Window Previews",
@@ -151,6 +176,7 @@ final class PreferencesMenu {
         if let menu = sender.menu {
             refreshBackgroundChecks(in: menu)
         }
+        updateGlassStrengthEnabled()
     }
 
     private func refreshBackgroundChecks(in menu: NSMenu) {
@@ -158,6 +184,33 @@ final class PreferencesMenu {
         for item in menu.items {
             item.state = ((item.representedObject as? String) == current) ? .on : .off
         }
+    }
+
+    // MARK: - Glass Strength
+
+    @objc private func selectGlassStrength(_ sender: NSMenuItem) {
+        let level = GlassStrength.resolve(sender.representedObject as? String)
+        if level == GlassStrength.defaultLevel {
+            UserDefaults.standard.removeObject(forKey: SwitcherPanel.glassStrengthDefaultsKey)
+        } else {
+            UserDefaults.standard.set(level.rawValue, forKey: SwitcherPanel.glassStrengthDefaultsKey)
+        }
+        if let menu = sender.menu {
+            refreshGlassStrengthChecks(in: menu)
+        }
+    }
+
+    private func refreshGlassStrengthChecks(in menu: NSMenu) {
+        let current = GlassStrength.resolve(UserDefaults.standard.string(forKey: SwitcherPanel.glassStrengthDefaultsKey))
+        for item in menu.items {
+            item.state = ((item.representedObject as? String) == current.rawValue) ? .on : .off
+        }
+    }
+
+    /// Strength only applies to the Liquid Glass background.
+    private func updateGlassStrengthEnabled() {
+        glassStrengthItem?.isEnabled =
+            UserDefaults.standard.string(forKey: SwitcherPanel.backgroundDefaultsKey) == "glass"
     }
 
     // MARK: - Window Previews
