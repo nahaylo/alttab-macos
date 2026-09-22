@@ -67,17 +67,19 @@ enum SwitcherStyle: String, CaseIterable {
     static let iconArtworkFraction: CGFloat = 0.8
     /// Native proportions, relative to the visible icon edge (measured off
     /// pixel screenshots of the Dock's switcher): the selection highlight is
-    /// 15% larger than the icon, highlights nearly touch (icons 0.23 apart),
-    /// the panel edge is 0.16 icon beyond the outer highlights (0.24 beyond
-    /// the icon), and the panel top sits 0.25 icon above the icon.
+    /// 15% larger than the icon, highlights sit 0.06 icon apart (icon pitch
+    /// 1.21 — closer than the artwork's own transparent margin, so the cell
+    /// IS the highlight and the image overhangs it into that margin), the
+    /// panel edge is 0.16 icon beyond the outer highlights, and the panel top
+    /// sits 0.25 icon above the icon.
     static let highlightScale: CGFloat = 1.15
-    static let gapScale: CGFloat = 0.03
+    static let gapScale: CGFloat = 0.06
     static let sidePaddingScale: CGFloat = 0.16
     static let topPaddingScale: CGFloat = 0.25
-    /// Below the icon: the caption's top sits captionGapScale of an icon
-    /// under the artwork — right at the highlight's bottom edge — and the
-    /// panel ends bottomPaddingScale under the caption text.
-    static let captionGapScale: CGFloat = 0.08
+    /// Below the icon: the caption label's top sits captionGapScale of an
+    /// icon under the artwork (glyphs a few points lower still), and the
+    /// panel ends bottomPaddingScale under the label.
+    static let captionGapScale: CGFloat = 0.14
     static let bottomPaddingScale: CGFloat = 0.08
     /// Caption text height budget (13pt system font).
     static let captionTextHeight: CGFloat = 16
@@ -106,31 +108,28 @@ enum SwitcherStyle: String, CaseIterable {
         case .icons:
             let n = CGFloat(max(1, count))
             // Everything in units of the visible icon edge v. The cell is the
-            // image frame (v / artworkFraction); the highlight sits inside it.
+            // highlight wide (so highlights can sit at the native pitch) and
+            // the image frame (v / artworkFraction) tall; the image overhangs
+            // the cell horizontally by (frame - highlight) / 2 per side, all
+            // of it inside the artwork's transparent margin, so nothing
+            // visible is ever clipped by the strip.
             let frameScale = 1 / Self.iconArtworkFraction                    // 1.25
-            let frameOverhang = frameScale - Self.highlightScale             // frame beyond highlight, both sides
-            // Cells cannot overlap: when the frame margin already exceeds the
-            // wanted highlight gap the cell gap is zero, and the fit must use
-            // that same clamped value or it overshoots and steps down slowly.
-            let cellGapScale = max(0, Self.gapScale - frameOverhang)         // cell gap giving the highlight gap
-            let edgePadScale = Self.sidePaddingScale - frameOverhang / 2     // panel edge → first cell
-            let perIcon = frameScale * n + cellGapScale * (n - 1) + 2 * edgePadScale
+            let perIcon = Self.highlightScale * n + Self.gapScale * (n - 1) + 2 * Self.sidePaddingScale
             // Panel top → icon top is topPaddingScale of the icon; the frame's
             // own margin above the artwork supplies part of that.
             let frameMarginScale = (frameScale - 1) / 2
 
             func build(_ visible: CGFloat) -> CellMetrics {
                 let frame = (visible * frameScale).rounded()
+                let highlight = (visible * Self.highlightScale).rounded()
                 // The caption row starts at the cell's bottom edge, which is
-                // already frameMargin below the artwork — more than the native
-                // caption gap, so the row is shorter than the text and the
-                // caption overlaps the cell's transparent bottom margin.
+                // already frameMargin below the artwork.
                 let captionRow = max(0, (visible * (Self.captionGapScale - frameMarginScale)).rounded() + Self.captionTextHeight)
                 return CellMetrics(iconSize: visible, iconFrame: frame,
-                                   highlightSize: (visible * Self.highlightScale).rounded(),
-                                   itemWidth: frame, itemHeight: frame,
-                                   itemSpacing: max(0, (visible * cellGapScale).rounded()),
-                                   panelPaddingX: max(0, (visible * edgePadScale).rounded()),
+                                   highlightSize: highlight,
+                                   itemWidth: highlight, itemHeight: frame,
+                                   itemSpacing: max(0, (visible * Self.gapScale).rounded()),
+                                   panelPaddingX: max(0, (visible * Self.sidePaddingScale).rounded()),
                                    panelPaddingY: max(4, (visible * (Self.topPaddingScale - frameMarginScale)).rounded()),
                                    panelPaddingBottom: max(4, (visible * Self.bottomPaddingScale).rounded()),
                                    captionRowHeight: captionRow,

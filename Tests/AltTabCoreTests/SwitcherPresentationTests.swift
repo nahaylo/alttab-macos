@@ -52,11 +52,13 @@ final class SwitcherPresentationTests: XCTestCase {
     func testIconsUseTheLargestIconWhenTheRowFits() {
         let m = SwitcherStyle.icons.metrics(count: 5, maxPanelWidth: 1500)
         XCTAssertEqual(m.iconSize, SwitcherStyle.maxIconSize)
-        XCTAssertEqual(m.itemWidth, m.itemHeight, "icon cells are square")
-        XCTAssertEqual(m.itemWidth, m.iconFrame, "the cell is the image frame")
+        XCTAssertEqual(m.itemWidth, m.highlightSize, "the cell is the highlight wide (native pitch)")
+        XCTAssertEqual(m.itemHeight, m.iconFrame, "and the image frame tall (no vertical clipping)")
         XCTAssertGreaterThan(m.iconFrame, m.iconSize, "frame includes the artwork's transparent margin")
         XCTAssertGreaterThan(m.highlightSize, m.iconSize, "highlight surrounds the visible icon")
-        XCTAssertGreaterThanOrEqual(m.itemHeight, m.highlightSize, "highlight must fit the cell")
+        // The image overhangs the cell horizontally, but only within its own
+        // transparent margin: nothing visible can be clipped.
+        XCTAssertLessThanOrEqual((m.iconFrame - m.itemWidth) / 2, (m.iconFrame - m.iconSize) / 2)
         XCTAssertGreaterThan(m.captionRowHeight, 0, "caption row is where the selected name goes")
         XCTAssertEqual(m.panelHeight, m.panelPaddingY + m.itemHeight + m.captionRowHeight + m.panelPaddingBottom)
     }
@@ -71,12 +73,8 @@ final class SwitcherPresentationTests: XCTestCase {
             let v = m.iconSize
             XCTAssertEqual(m.iconFrame, (v / SwitcherStyle.iconArtworkFraction).rounded())
             XCTAssertEqual(m.highlightSize, (v * SwitcherStyle.highlightScale).rounded())
-            // Cells cannot overlap, so the highlight gap bottoms out at the
-            // image frame's margin around the highlight.
-            let highlightGap = m.itemSpacing + (m.itemWidth - m.highlightSize)
-            XCTAssertEqual(highlightGap, max(v * SwitcherStyle.gapScale, m.itemWidth - m.highlightSize), accuracy: 1.5)
-            let edgeToHighlight = m.panelPaddingX + (m.itemWidth - m.highlightSize) / 2
-            XCTAssertEqual(edgeToHighlight, v * SwitcherStyle.sidePaddingScale, accuracy: 1.5)
+            XCTAssertEqual(m.itemSpacing, (v * SwitcherStyle.gapScale).rounded(), "highlight-to-highlight gap")
+            XCTAssertEqual(m.panelPaddingX, (v * SwitcherStyle.sidePaddingScale).rounded(), "panel edge to highlight")
         }
         XCTAssertLessThan(small.itemSpacing, big.itemSpacing)
     }
@@ -104,6 +102,14 @@ final class SwitcherPresentationTests: XCTestCase {
     func testFifteenAppsOnAWideDisplayKeepLargeIcons() {
         let m = SwitcherStyle.icons.metrics(count: 15, maxPanelWidth: 2560 * SwitcherStyle.icons.maxPanelWidthFraction)
         XCTAssertGreaterThanOrEqual(m.iconSize, 112)
+    }
+
+    /// Pixel-measured off the Dock's switcher on a 2560pt display with 17
+    /// apps: 111pt icons at a 134pt pitch. The model must reproduce it.
+    func testSeventeenAppsReproduceTheMeasuredNativeGeometry() {
+        let m = SwitcherStyle.icons.metrics(count: 17, maxPanelWidth: 2560 * SwitcherStyle.icons.maxPanelWidthFraction)
+        XCTAssertEqual(m.iconSize, 111, accuracy: 1)
+        XCTAssertEqual(m.itemWidth + m.itemSpacing, 134, accuracy: 2, "icon pitch")
     }
 
     /// The native switcher shrinks icons as apps accumulate so the row keeps
