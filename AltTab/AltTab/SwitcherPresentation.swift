@@ -66,22 +66,22 @@ enum SwitcherStyle: String, CaseIterable {
     /// grid), so every proportion below is relative to the artwork and the
     /// image frame is enlarged to compensate — sizing to the frame made all
     /// the paddings come out a quarter too big.
-    /// 111pt visible is the Dock switcher's ceiling as measured: with room to
-    /// spare it narrows the panel rather than growing the icons further.
-    static let maxIconSize: CGFloat = 111
+    /// 104pt visible is the Dock switcher's ceiling (pixel-scanned: 208px on
+    /// a 2x display): with room to spare it narrows the panel rather than
+    /// growing the icons further.
+    static let maxIconSize: CGFloat = 104
     static let minIconSize: CGFloat = 48
     static let iconArtworkFraction: CGFloat = 0.8
-    /// Native proportions, relative to the visible icon edge (measured off
-    /// pixel screenshots of the Dock's switcher): the selection highlight is
-    /// 15% larger than the icon, highlights sit 0.06 icon apart (icon pitch
-    /// 1.21 — closer than the artwork's own transparent margin, so the cell
-    /// IS the highlight and the image overhangs it into that margin), the
-    /// panel edge is 0.16 icon beyond the outer highlights, and the panel top
-    /// sits 0.25 icon above the icon.
-    static let highlightScale: CGFloat = 1.15
-    static let gapScale: CGFloat = 0.06
+    /// Native proportions, relative to the visible icon edge (pixel-scanned
+    /// off screenshots of the Dock's switcher): the selection highlight is
+    /// 17% larger than the icon, highlights sit 0.12 icon apart (icon pitch
+    /// 1.29 — the cell IS the highlight and the image frame overhangs it into
+    /// the artwork's transparent margin), the panel edge is 0.16 icon beyond
+    /// the outer highlights, and the panel top sits 0.29 icon above the icon.
+    static let highlightScale: CGFloat = 1.17
+    static let gapScale: CGFloat = 0.12
     static let sidePaddingScale: CGFloat = 0.16
-    static let topPaddingScale: CGFloat = 0.25
+    static let topPaddingScale: CGFloat = 0.29
     /// Below the icon: the caption label's top sits captionGapScale of an
     /// icon under the artwork (glyphs a few points lower still), and the
     /// panel ends bottomPaddingScale under the label.

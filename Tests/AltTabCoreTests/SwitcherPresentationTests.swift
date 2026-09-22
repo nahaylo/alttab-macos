@@ -104,11 +104,11 @@ final class SwitcherPresentationTests: XCTestCase {
         XCTAssertEqual(m.iconSize, SwitcherStyle.maxIconSize, "room to spare → native ceiling, not a bigger icon")
     }
 
-    /// Pixel-measured off the Dock's switcher on a 2560pt display with 17
-    /// apps: 111pt icons at a 134pt pitch. The model must reproduce it.
-    func testSeventeenAppsReproduceTheMeasuredNativeGeometry() {
-        let m = SwitcherStyle.icons.metrics(count: 17, maxPanelWidth: 2560 * SwitcherStyle.icons.maxPanelWidthFraction)
-        XCTAssertEqual(m.iconSize, 111, accuracy: 1)
+    /// Pixel-scanned off the Dock's switcher on a 2560pt display with 16–17
+    /// apps: 104pt icons at a 134pt pitch. The model must reproduce it.
+    func testSixteenAppsReproduceTheMeasuredNativeGeometry() {
+        let m = SwitcherStyle.icons.metrics(count: 16, maxPanelWidth: 2560 * SwitcherStyle.icons.maxPanelWidthFraction)
+        XCTAssertEqual(m.iconSize, 104)
         XCTAssertEqual(m.itemWidth + m.itemSpacing, 134, accuracy: 2, "icon pitch")
     }
 
