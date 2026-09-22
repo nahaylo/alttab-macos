@@ -231,15 +231,15 @@ final class PreferencesMenu {
     // MARK: - Group by Application
 
     static var groupByApplication: Bool {
-        UserDefaults.standard.bool(forKey: AppGrouping.defaultsKey)
+        AppGrouping.resolve(UserDefaults.standard.object(forKey: AppGrouping.defaultsKey) as? Bool)
     }
 
     @objc private func toggleGroupByApplication(_ sender: NSMenuItem) {
         let enabling = sender.state == .off
-        if enabling {
-            UserDefaults.standard.set(true, forKey: AppGrouping.defaultsKey)
-        } else {
+        if enabling == AppGrouping.defaultEnabled {
             UserDefaults.standard.removeObject(forKey: AppGrouping.defaultsKey)
+        } else {
+            UserDefaults.standard.set(enabling, forKey: AppGrouping.defaultsKey)
         }
         sender.state = enabling ? .on : .off
     }
@@ -299,8 +299,8 @@ final class PreferencesMenu {
     // MARK: - Background
 
     @objc private func selectBackground(_ sender: NSMenuItem) {
-        let value = sender.representedObject as? String ?? "solid"
-        if value == "solid" {
+        let value = sender.representedObject as? String ?? SwitcherPanel.defaultBackground
+        if value == SwitcherPanel.defaultBackground {
             UserDefaults.standard.removeObject(forKey: SwitcherPanel.backgroundDefaultsKey)
         } else {
             UserDefaults.standard.set(value, forKey: SwitcherPanel.backgroundDefaultsKey)
@@ -312,7 +312,7 @@ final class PreferencesMenu {
     }
 
     private func refreshBackgroundChecks(in menu: NSMenu) {
-        let current = UserDefaults.standard.string(forKey: SwitcherPanel.backgroundDefaultsKey) ?? "solid"
+        let current = UserDefaults.standard.string(forKey: SwitcherPanel.backgroundDefaultsKey) ?? SwitcherPanel.defaultBackground
         for item in menu.items {
             item.state = ((item.representedObject as? String) == current) ? .on : .off
         }

@@ -32,9 +32,13 @@ final class SwitcherPanel: NSPanel {
     /// UserDefaults key for the appearance override: absent/"system", "light", or "dark".
     static let appearanceDefaultsKey = "AppearanceOverride"
 
-    /// UserDefaults key for the panel background style: absent/"solid",
-    /// "transparent", "glass", or "system".
+    /// UserDefaults key for the panel background style: absent/"system",
+    /// "solid", "transparent", or "glass".
     static let backgroundDefaultsKey = "BackgroundStyle"
+    /// System — the OS's own switcher material — is the default. Solid (the
+    /// WCAG AA-tested plate) remains available for anyone who needs the
+    /// guaranteed label contrast.
+    static let defaultBackground = "system"
 
     /// UserDefaults key for the Liquid Glass strength: absent/"high" (the
     /// original look), "light", "medium", or "max". Only used with "glass".
@@ -48,7 +52,7 @@ final class SwitcherPanel: NSPanel {
         case solid, transparent, glass, system
 
         /// Resolves the stored preference to a drawable style plus the glass
-        /// strength to draw it with. Unknown values map to solid; "glass"
+        /// strength to draw it with. Unknown values map to system; "glass"
         /// falls back to solid on macOS < 26 where NSGlassEffectView does not
         /// exist; "system" is what the Dock's own switcher draws on this OS —
         /// Liquid Glass at the OS default (`followsSystem`: the view's style
@@ -56,8 +60,8 @@ final class SwitcherPanel: NSPanel {
         /// and any future default apply as-is) on 26+, the translucent HUD
         /// material before — so it never returns .system.
         static func resolved() -> (style: BackgroundStyle, strength: GlassStrength, followsSystem: Bool) {
-            let raw = UserDefaults.standard.string(forKey: SwitcherPanel.backgroundDefaultsKey) ?? "solid"
-            let stored = BackgroundStyle(rawValue: raw) ?? .solid
+            let raw = UserDefaults.standard.string(forKey: SwitcherPanel.backgroundDefaultsKey) ?? SwitcherPanel.defaultBackground
+            let stored = BackgroundStyle(rawValue: raw) ?? .system
             switch stored {
             case .system:
                 if #available(macOS 26.0, *) { return (.glass, GlassStrength.defaultLevel, true) }
@@ -344,7 +348,7 @@ final class SwitcherPanel: NSPanel {
         thumbnailViews.forEach { $0.removeFromSuperview() }
         thumbnailViews.removeAll()
         windowIDs = windows.map { $0.windowID }
-        let grouped = UserDefaults.standard.bool(forKey: AppGrouping.defaultsKey)
+        let grouped = AppGrouping.resolve(UserDefaults.standard.object(forKey: AppGrouping.defaultsKey) as? Bool)
         captions = windows.map {
             SwitcherStyle.caption(windowTitle: $0.windowTitle,
                                   appName: appDisplayName(pid: $0.ownerPID, fallback: $0.ownerName),

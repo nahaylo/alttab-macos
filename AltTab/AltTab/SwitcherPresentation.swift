@@ -35,8 +35,9 @@ enum SwitcherStyle: String, CaseIterable {
     case thumbnails
     case icons
 
-    /// The original look ships as the default.
-    static let defaultStyle: SwitcherStyle = .thumbnails
+    /// Icons — the native look — is the default; Thumbnails is the original
+    /// cell, still one click away.
+    static let defaultStyle: SwitcherStyle = .icons
     /// UserDefaults key. Absent (or unknown) means `defaultStyle`.
     static let defaultsKey = "SwitcherStyle"
 
@@ -247,8 +248,15 @@ enum DockBadges {
 
 enum AppGrouping {
 
-    /// UserDefaults key for the "Group by Application" toggle (Bool, default off).
+    /// UserDefaults key for the "Group by Application" toggle (Bool).
     static let defaultsKey = "GroupByApplication"
+    /// On by default: one entry per app, like the system switcher.
+    static let defaultEnabled = true
+
+    /// Resolves the stored toggle; nil (never set) means `defaultEnabled`.
+    static func resolve(_ stored: Bool?) -> Bool {
+        stored ?? defaultEnabled
+    }
 
     /// Keeps the first item per owner pid, preserving order. Fed an MRU-sorted
     /// list, the survivor for each app is its most recently used window and

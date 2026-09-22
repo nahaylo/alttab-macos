@@ -20,11 +20,11 @@ final class SwitcherPresentationTests: XCTestCase {
 
     // MARK: - SwitcherStyle
 
-    func testStyleDefaultIsThumbnailsAndResolveFallsBack() {
-        XCTAssertEqual(SwitcherStyle.defaultStyle, .thumbnails)
-        XCTAssertEqual(SwitcherStyle.resolve(nil), .thumbnails)
-        XCTAssertEqual(SwitcherStyle.resolve("grid"), .thumbnails)
-        XCTAssertEqual(SwitcherStyle.resolve("icons"), .icons)
+    func testStyleDefaultIsIconsAndResolveFallsBack() {
+        XCTAssertEqual(SwitcherStyle.defaultStyle, .icons)
+        XCTAssertEqual(SwitcherStyle.resolve(nil), .icons)
+        XCTAssertEqual(SwitcherStyle.resolve("grid"), .icons)
+        XCTAssertEqual(SwitcherStyle.resolve("thumbnails"), .thumbnails)
         for style in SwitcherStyle.allCases {
             XCTAssertEqual(SwitcherStyle.resolve(style.rawValue), style)
         }
@@ -149,6 +149,15 @@ final class SwitcherPresentationTests: XCTestCase {
         XCTAssertEqual(SwitcherStyle.caption(windowTitle: "Inbox", appName: "Mail", grouped: true), "Mail")
         XCTAssertEqual(SwitcherStyle.caption(windowTitle: "Inbox", appName: "Mail", grouped: false), "Inbox")
         XCTAssertEqual(SwitcherStyle.caption(windowTitle: "", appName: "Mail", grouped: false), "Mail")
+    }
+
+    // MARK: - AppGrouping toggle
+
+    func testGroupingIsOnByDefaultAndHonorsAnExplicitChoice() {
+        XCTAssertTrue(AppGrouping.defaultEnabled)
+        XCTAssertTrue(AppGrouping.resolve(nil))
+        XCTAssertFalse(AppGrouping.resolve(false))
+        XCTAssertTrue(AppGrouping.resolve(true))
     }
 
     // MARK: - AppGrouping.collapse
