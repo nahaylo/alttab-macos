@@ -154,12 +154,12 @@ final class ThumbnailView: NSView {
         let width = metrics.itemWidth
         let height = metrics.itemHeight
         let icon = metrics.iconSize
-        // The highlight is a rounded square a little larger than the icon,
-        // like the native switcher's; its radius scales with the icon.
-        let highlightSize = icon + 16
+        // The highlight is a rounded square a fifth larger than the icon,
+        // like the native switcher's; its radius scales with it.
+        let highlightSize = metrics.highlightSize
 
         selectionView.wantsLayer = true
-        selectionView.layer?.cornerRadius = max(10, highlightSize * 0.16)
+        selectionView.layer?.cornerRadius = (highlightSize * 0.22).rounded()
         selectionView.layer?.backgroundColor = NSColor.clear.cgColor
         selectionView.translatesAutoresizingMaskIntoConstraints = false
         addSubview(selectionView)
@@ -252,7 +252,7 @@ final class ThumbnailView: NSView {
 
             case .icons:
                 selectionView.layer?.backgroundColor = isSelected
-                    ? NSColor.labelColor.withAlphaComponent(0.16).cgColor
+                    ? NSColor.labelColor.withAlphaComponent(0.12).cgColor
                     : NSColor.clear.cgColor
             }
         }

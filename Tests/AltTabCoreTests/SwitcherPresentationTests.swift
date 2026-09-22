@@ -37,48 +37,67 @@ final class SwitcherPresentationTests: XCTestCase {
     }
 
     func testThumbnailsMetricsAreFixedRegardlessOfCount() {
-        let few = SwitcherStyle.thumbnails.metrics(count: 2, availableWidth: 2000)
-        let many = SwitcherStyle.thumbnails.metrics(count: 40, availableWidth: 800)
+        let few = SwitcherStyle.thumbnails.metrics(count: 2, maxPanelWidth: 2000)
+        let many = SwitcherStyle.thumbnails.metrics(count: 40, maxPanelWidth: 800)
         XCTAssertEqual(few, many)
         XCTAssertEqual(few.itemWidth, 180, "original cell width preserved")
         XCTAssertEqual(few.itemHeight, 160, "original cell height preserved")
         XCTAssertEqual(few.itemSpacing, 12)
+        XCTAssertEqual(few.panelPaddingX, 20, "original panel padding preserved")
+        XCTAssertEqual(few.panelPaddingY, 20)
+        XCTAssertEqual(few.panelCornerRadius, 16, "original panel corners preserved")
         XCTAssertEqual(SwitcherStyle.thumbnails.captionRowHeight, 0, "thumbnails label inside the cell")
     }
 
     func testIconsUseTheLargestIconWhenTheRowFits() {
-        let m = SwitcherStyle.icons.metrics(count: 5, availableWidth: 1500)
+        let m = SwitcherStyle.icons.metrics(count: 5, maxPanelWidth: 1500)
         XCTAssertEqual(m.iconSize, SwitcherStyle.maxIconSize)
         XCTAssertEqual(m.itemWidth, m.itemHeight, "icon cells are square")
-        XCTAssertGreaterThanOrEqual(m.itemHeight, m.iconSize + 16, "highlight must fit the cell")
+        XCTAssertGreaterThan(m.highlightSize, m.iconSize, "highlight surrounds the icon")
+        XCTAssertGreaterThanOrEqual(m.itemHeight, m.highlightSize, "highlight must fit the cell")
         XCTAssertGreaterThan(SwitcherStyle.icons.captionRowHeight, 0, "caption row is where the selected name goes")
     }
 
+    /// Native proportions: highlight, gap and side padding all scale with the
+    /// icon, so a shrunken row keeps the same look rather than cramming.
+    func testIconsProportionsScaleWithTheIcon() {
+        let big = SwitcherStyle.icons.metrics(count: 3, maxPanelWidth: 3000)
+        let small = SwitcherStyle.icons.metrics(count: 60, maxPanelWidth: 800)
+        for m in [big, small] {
+            XCTAssertEqual(m.highlightSize, (m.iconSize * SwitcherStyle.highlightScale).rounded())
+            XCTAssertEqual(m.itemSpacing, (m.iconSize * SwitcherStyle.gapScale).rounded())
+            XCTAssertEqual(m.panelPaddingX, m.itemSpacing, "side padding equals the gap")
+        }
+        XCTAssertLessThan(small.itemSpacing, big.itemSpacing)
+    }
+
     /// The native switcher shrinks icons as apps accumulate so the row keeps
-    /// fitting the screen; the row must fit exactly-or-under the width given.
-    func testIconsShrinkSoTheWholeRowFits() {
+    /// fitting the screen; the whole panel must fit the width given.
+    func testIconsShrinkSoTheWholePanelFits() {
         let width: CGFloat = 1200
-        let m = SwitcherStyle.icons.metrics(count: 14, availableWidth: width)
+        let m = SwitcherStyle.icons.metrics(count: 10, maxPanelWidth: width)
         XCTAssertLessThan(m.iconSize, SwitcherStyle.maxIconSize)
         XCTAssertGreaterThanOrEqual(m.iconSize, SwitcherStyle.minIconSize)
-        XCTAssertLessThanOrEqual(m.stripWidth(count: 14), width)
+        XCTAssertLessThanOrEqual(m.panelWidth(count: 10), width)
         // Monotonic: more items never yield a bigger icon.
-        let more = SwitcherStyle.icons.metrics(count: 15, availableWidth: width)
+        let more = SwitcherStyle.icons.metrics(count: 11, maxPanelWidth: width)
         XCTAssertLessThanOrEqual(more.iconSize, m.iconSize)
     }
 
     func testIconsStopShrinkingAtTheFloorAndLetTheStripScroll() {
         let width: CGFloat = 800
-        let m = SwitcherStyle.icons.metrics(count: 60, availableWidth: width)
+        let m = SwitcherStyle.icons.metrics(count: 60, maxPanelWidth: width)
         XCTAssertEqual(m.iconSize, SwitcherStyle.minIconSize)
-        XCTAssertGreaterThan(m.stripWidth(count: 60), width, "past the floor the strip overflows and scrolls")
+        XCTAssertGreaterThan(m.panelWidth(count: 60), width, "past the floor the strip overflows and scrolls")
     }
 
-    func testStripWidthCountsSpacingBetweenCellsOnly() {
-        let m = CellMetrics(iconSize: 0, itemWidth: 100, itemHeight: 100, itemSpacing: 10)
+    func testStripAndPanelWidthArithmetic() {
+        let m = CellMetrics(iconSize: 0, highlightSize: 0, itemWidth: 100, itemHeight: 100, itemSpacing: 10,
+                            panelPaddingX: 15, panelPaddingY: 5, panelCornerRadius: 8)
         XCTAssertEqual(m.stripWidth(count: 0), 0)
         XCTAssertEqual(m.stripWidth(count: 1), 100)
         XCTAssertEqual(m.stripWidth(count: 3), 320)
+        XCTAssertEqual(m.panelWidth(count: 3), 350)
     }
 
     /// Grouped lists are apps → app name (like the system switcher);

@@ -71,20 +71,24 @@ final class SwitcherPanel: NSPanel {
 
     private var installedStyle: BackgroundStyle?
     private var installedGlassStrength: GlassStrength?
+    private var installedCornerRadius: CGFloat?
 
     /// Cell geometry comes from the Style preference, re-read on every show();
     /// Icons metrics also depend on the item count and the screen width.
     private var style: SwitcherStyle = SwitcherStyle.defaultStyle
-    private var metrics = SwitcherStyle.defaultStyle.metrics(count: 0, availableWidth: 0)
-    private let panelPadding: CGFloat = 20
+    private var metrics = SwitcherStyle.defaultStyle.metrics(count: 0, maxPanelWidth: 0)
     /// Fraction of the screen width the panel may occupy.
     private let maxPanelWidthFraction: CGFloat = 0.85
 
     private var scrollView: NSScrollView!
     private var stackView: NSStackView!
     private var stackHeightConstraint: NSLayoutConstraint!
-    /// Scroll view's bottom inset: panel padding plus the caption row.
+    /// Scroll view insets from the background root: the panel padding, plus
+    /// the caption row at the bottom. Re-tuned per style on every show().
+    private var scrollTopConstraint: NSLayoutConstraint?
     private var scrollBottomConstraint: NSLayoutConstraint?
+    private var scrollLeadingConstraint: NSLayoutConstraint?
+    private var scrollTrailingConstraint: NSLayoutConstraint?
     /// Icons style: the selected item's caption, floating under its icon at
     /// panel level (frame-positioned, clamped to the panel) so a long name
     /// is never truncated to the 120pt cell like the native switcher.
@@ -148,19 +152,20 @@ final class SwitcherPanel: NSPanel {
         captionLabel.isHidden = true
 
         let background = BackgroundStyle.resolved()
-        installBackground(background.style, glassStrength: background.strength)
+        installBackground(background.style, glassStrength: background.strength,
+                          cornerRadius: metrics.panelCornerRadius)
     }
 
     /// The opaque, appearance-adaptive plate whose label contrast the
     /// WCAGContrastTests guarantee (>= 4.5:1, WCAG AA). Also the fallback
     /// for unavailable styles.
-    private static func makeSolidBackground() -> NSBox {
+    private static func makeSolidBackground(cornerRadius: CGFloat) -> NSBox {
         let box = NSBox()
         box.boxType = .custom
         box.titlePosition = .noTitle
         box.fillColor = .windowBackgroundColor
         box.borderWidth = 0
-        box.cornerRadius = 16
+        box.cornerRadius = cornerRadius
         box.contentViewMargins = .zero
         return box
     }
@@ -171,7 +176,7 @@ final class SwitcherPanel: NSPanel {
     /// view. The fill is a dynamic color so it re-resolves on Light/Dark
     /// changes — withAlphaComponent() on the catalog color directly would
     /// freeze whichever appearance is current at creation time.
-    private static func makeGlassHost(plateAlpha: CGFloat) -> NSView {
+    private static func makeGlassHost(plateAlpha: CGFloat, cornerRadius: CGFloat) -> NSView {
         guard plateAlpha > 0 else {
             let host = NSView()
             host.translatesAutoresizingMaskIntoConstraints = false
@@ -188,7 +193,7 @@ final class SwitcherPanel: NSPanel {
             return color
         }
         plate.borderWidth = 0
-        plate.cornerRadius = 16
+        plate.cornerRadius = cornerRadius
         plate.contentViewMargins = .zero
         plate.translatesAutoresizingMaskIntoConstraints = false
         return plate
@@ -197,14 +202,16 @@ final class SwitcherPanel: NSPanel {
     /// Re-installs the background root only when a preference changed.
     private func installBackgroundIfNeeded() {
         let (style, strength) = BackgroundStyle.resolved()
-        if style != installedStyle || (style == .glass && strength != installedGlassStrength) {
-            installBackground(style, glassStrength: strength)
+        let radius = metrics.panelCornerRadius
+        if style != installedStyle || (style == .glass && strength != installedGlassStrength)
+            || radius != installedCornerRadius {
+            installBackground(style, glassStrength: strength, cornerRadius: radius)
         }
     }
 
     /// Builds the root view for the style and re-parents the persistent
     /// scroll view into it with the standard panel padding.
-    private func installBackground(_ style: BackgroundStyle, glassStrength: GlassStrength) {
+    private func installBackground(_ style: BackgroundStyle, glassStrength: GlassStrength, cornerRadius: CGFloat) {
         scrollView.removeFromSuperview()
         captionLabel.removeFromSuperview()
 
@@ -215,7 +222,7 @@ final class SwitcherPanel: NSPanel {
         case .solid, .system:
             // .system is unreachable: resolved() always maps it to a drawable
             // style. Kept for exhaustiveness.
-            let box = Self.makeSolidBackground()
+            let box = Self.makeSolidBackground(cornerRadius: cornerRadius)
             root = box
             scrollHost = box
 
@@ -229,7 +236,7 @@ final class SwitcherPanel: NSPanel {
             effect.blendingMode = .behindWindow
             effect.state = .active
             effect.wantsLayer = true
-            effect.layer?.cornerRadius = 16
+            effect.layer?.cornerRadius = cornerRadius
             effect.layer?.masksToBounds = true
             root = effect
             scrollHost = effect
@@ -247,9 +254,9 @@ final class SwitcherPanel: NSPanel {
                 // the two knobs there are: the clear style for Max, and the
                 // host's translucent plate for Light / Medium (see GlassStrength).
                 let glass = NSGlassEffectView()
-                glass.cornerRadius = 16
+                glass.cornerRadius = cornerRadius
                 glass.style = glassStrength.usesClearStyle ? .clear : .regular
-                let host = Self.makeGlassHost(plateAlpha: glassStrength.plateAlpha)
+                let host = Self.makeGlassHost(plateAlpha: glassStrength.plateAlpha, cornerRadius: cornerRadius)
                 glass.contentView = host
                 NSLayoutConstraint.activate([
                     host.topAnchor.constraint(equalTo: glass.topAnchor),
@@ -260,9 +267,9 @@ final class SwitcherPanel: NSPanel {
                 root = glass
                 scrollHost = host
             } else {
-                // Unreachable: BackgroundStyle.current() never yields .glass
+                // Unreachable: BackgroundStyle.resolved() never yields .glass
                 // below macOS 26. Kept for exhaustiveness.
-                let box = Self.makeSolidBackground()
+                let box = Self.makeSolidBackground(cornerRadius: cornerRadius)
                 root = box
                 scrollHost = box
             }
@@ -271,31 +278,42 @@ final class SwitcherPanel: NSPanel {
         contentView = root
         scrollHost.addSubview(scrollView)
         scrollHost.addSubview(captionLabel)
-        let bottom = scrollView.bottomAnchor.constraint(equalTo: scrollHost.bottomAnchor,
-                                                        constant: -(panelPadding + self.style.captionRowHeight))
+        let top = scrollView.topAnchor.constraint(equalTo: scrollHost.topAnchor, constant: 0)
+        let bottom = scrollView.bottomAnchor.constraint(equalTo: scrollHost.bottomAnchor, constant: 0)
+        let leading = scrollView.leadingAnchor.constraint(equalTo: scrollHost.leadingAnchor, constant: 0)
+        let trailing = scrollView.trailingAnchor.constraint(equalTo: scrollHost.trailingAnchor, constant: 0)
+        scrollTopConstraint = top
         scrollBottomConstraint = bottom
-        NSLayoutConstraint.activate([
-            scrollView.topAnchor.constraint(equalTo: scrollHost.topAnchor, constant: panelPadding),
-            bottom,
-            scrollView.leadingAnchor.constraint(equalTo: scrollHost.leadingAnchor, constant: panelPadding),
-            scrollView.trailingAnchor.constraint(equalTo: scrollHost.trailingAnchor, constant: -panelPadding),
-        ])
+        scrollLeadingConstraint = leading
+        scrollTrailingConstraint = trailing
+        NSLayoutConstraint.activate([top, bottom, leading, trailing])
+        applyScrollInsets()
         installedStyle = style
         installedGlassStrength = glassStrength
+        installedCornerRadius = cornerRadius
+    }
+
+    /// Insets the strip by the current metrics' padding (plus the caption row).
+    private func applyScrollInsets() {
+        scrollTopConstraint?.constant = metrics.panelPaddingY
+        scrollBottomConstraint?.constant = -(metrics.panelPaddingY + style.captionRowHeight)
+        scrollLeadingConstraint?.constant = metrics.panelPaddingX
+        scrollTrailingConstraint?.constant = -metrics.panelPaddingX
     }
 
     // MARK: - Public API
 
     func show(windows: [WindowInfo], selectedIndex: Int) {
         applyAppearancePreference()
-        installBackgroundIfNeeded()
         // The panel opens on the screen containing the mouse; its width caps
-        // the strip, which is what Icons metrics adapt to.
+        // the strip, which is what Icons metrics adapt to. Metrics first: the
+        // background's corner radius and the strip insets depend on them.
         let mouseLocation = NSEvent.mouseLocation
         guard let screen = NSScreen.screens.first(where: { NSMouseInRect(mouseLocation, $0.frame, false) })
                 ?? NSScreen.main ?? NSScreen.screens.first else { return }
         let maxPanelWidth = screen.frame.width * maxPanelWidthFraction
-        applyStylePreference(count: windows.count, availableWidth: maxPanelWidth - panelPadding * 2)
+        applyStylePreference(count: windows.count, maxPanelWidth: maxPanelWidth)
+        installBackgroundIfNeeded()
         self.selectedIndex = selectedIndex
 
         // Clear old
@@ -322,9 +340,8 @@ final class SwitcherPanel: NSPanel {
         }
 
         // Size and position the panel.
-        let contentWidth = metrics.stripWidth(count: windows.count)
-        let panelWidth = min(maxPanelWidth, contentWidth + panelPadding * 2)
-        let panelHeight = metrics.itemHeight + style.captionRowHeight + panelPadding * 2
+        let panelWidth = min(maxPanelWidth, metrics.panelWidth(count: windows.count))
+        let panelHeight = metrics.itemHeight + style.captionRowHeight + metrics.panelPaddingY * 2
 
         let panelX = screen.frame.midX - panelWidth / 2
         let panelY = screen.frame.midY - panelHeight / 2
@@ -367,12 +384,12 @@ final class SwitcherPanel: NSPanel {
 
     /// Re-reads the Style preference, computes the cell metrics for this
     /// invocation, and resizes the strip for them.
-    private func applyStylePreference(count: Int, availableWidth: CGFloat) {
+    private func applyStylePreference(count: Int, maxPanelWidth: CGFloat) {
         style = SwitcherStyle.resolve(UserDefaults.standard.string(forKey: SwitcherStyle.defaultsKey))
-        metrics = style.metrics(count: count, availableWidth: availableWidth)
+        metrics = style.metrics(count: count, maxPanelWidth: maxPanelWidth)
         stackView.spacing = metrics.itemSpacing
         stackHeightConstraint.constant = metrics.itemHeight
-        scrollBottomConstraint?.constant = -(panelPadding + style.captionRowHeight)
+        applyScrollInsets()
     }
 
     /// Icons style: lays the selected item's caption out in the caption row,
@@ -392,12 +409,15 @@ final class SwitcherPanel: NSPanel {
 
         let cell = thumbnailViews[selectedIndex]
         let cellInHost = cell.convert(cell.bounds, to: host)
-        let maxWidth = max(0, host.bounds.width - panelPadding * 2)
+        let padX = metrics.panelPaddingX
+        let maxWidth = max(0, host.bounds.width - padX * 2)
         let size = NSSize(width: min(captionLabel.frame.width, maxWidth), height: captionLabel.frame.height)
-        let minX = panelPadding
-        let maxX = host.bounds.width - panelPadding - size.width
+        let minX = padX
+        let maxX = host.bounds.width - padX - size.width
         let x = min(max(cellInHost.midX - size.width / 2, minX), maxX)
-        let y = panelPadding + (style.captionRowHeight - size.height) / 2
+        // Hug the icon: top of the caption row, so the gap is just the
+        // highlight inset plus the row's slack above the text.
+        let y = metrics.panelPaddingY + max(0, style.captionRowHeight - size.height - 2)
         captionLabel.frame = NSRect(x: x, y: y, width: size.width, height: size.height)
     }
 

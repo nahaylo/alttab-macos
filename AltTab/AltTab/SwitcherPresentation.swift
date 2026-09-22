@@ -57,27 +57,38 @@ enum SwitcherStyle: String, CaseIterable {
 
     /// Largest icon edge for Icons style (what the native switcher draws for
     /// a handful of apps) and the floor it shrinks to before scrolling.
-    static let maxIconSize: CGFloat = 96
+    static let maxIconSize: CGFloat = 128
     static let minIconSize: CGFloat = 48
-    /// Padding around the icon inside its cell (8pt highlight inset + 4pt).
-    static let iconCellInset: CGFloat = 12
+    /// Native proportions, all relative to the icon edge: the selection
+    /// highlight is a fifth larger than the icon, and both the gap between
+    /// icons and the panel's side padding are a quarter of it.
+    static let highlightScale: CGFloat = 1.2
+    static let gapScale: CGFloat = 0.25
+    /// Breathing room between the highlight and the cell edge, per side.
+    static let highlightInset: CGFloat = 2
 
-    /// Cell geometry for `count` items in `availableWidth` points of strip.
-    /// Thumbnails cells are fixed. Icons cells size their icon so the whole
-    /// row fits, clamped to [minIconSize, maxIconSize]; a row that does not
-    /// fit even at the floor scrolls (the panel's existing behavior).
-    func metrics(count: Int, availableWidth: CGFloat) -> CellMetrics {
+    /// Cell geometry for `count` items in a panel at most `maxPanelWidth`
+    /// wide. Thumbnails cells are fixed. Icons cells size their icon so the
+    /// whole row — cells, gaps and side padding — fits, clamped to
+    /// [minIconSize, maxIconSize]; a row that does not fit even at the floor
+    /// scrolls (the panel's existing behavior).
+    func metrics(count: Int, maxPanelWidth: CGFloat) -> CellMetrics {
         switch self {
         case .thumbnails:
-            return CellMetrics(iconSize: 0, itemWidth: 180, itemHeight: 160, itemSpacing: 12)
+            return CellMetrics(iconSize: 0, highlightSize: 0, itemWidth: 180, itemHeight: 160, itemSpacing: 12,
+                               panelPaddingX: 20, panelPaddingY: 20, panelCornerRadius: 16)
         case .icons:
-            let spacing: CGFloat = 8
             let n = CGFloat(max(1, count))
-            // n * (icon + 2*inset) + (n - 1) * spacing <= availableWidth
-            let fitted = (availableWidth - (n - 1) * spacing) / n - 2 * Self.iconCellInset
-            let icon = min(Self.maxIconSize, max(Self.minIconSize, fitted.rounded(.down)))
-            let side = icon + 2 * Self.iconCellInset
-            return CellMetrics(iconSize: icon, itemWidth: side, itemHeight: side, itemSpacing: spacing)
+            // Width in terms of the icon edge i:
+            //   n * (highlightScale*i + 2*inset) + (n-1) * gapScale*i + 2 * gapScale*i <= maxPanelWidth
+            let perIcon = Self.highlightScale * n + Self.gapScale * (n - 1) + 2 * Self.gapScale
+            let fitted = ((maxPanelWidth - 2 * Self.highlightInset * n) / perIcon).rounded(.down)
+            let icon = min(Self.maxIconSize, max(Self.minIconSize, fitted))
+            let highlight = (icon * Self.highlightScale).rounded()
+            let gap = (icon * Self.gapScale).rounded()
+            let side = highlight + 2 * Self.highlightInset
+            return CellMetrics(iconSize: icon, highlightSize: highlight, itemWidth: side, itemHeight: side,
+                               itemSpacing: gap, panelPaddingX: gap, panelPaddingY: 12, panelCornerRadius: 28)
         }
     }
 
@@ -88,7 +99,7 @@ enum SwitcherStyle: String, CaseIterable {
     var captionRowHeight: CGFloat {
         switch self {
         case .thumbnails: return 0
-        case .icons: return 26
+        case .icons: return 22
         }
     }
 
@@ -110,14 +121,25 @@ struct CellMetrics: Equatable {
     /// Icon edge (Icons style); 0 for Thumbnails, whose image area is derived
     /// from the cell height instead.
     let iconSize: CGFloat
+    /// Edge of the rounded selection highlight behind the icon (Icons style).
+    let highlightSize: CGFloat
     let itemWidth: CGFloat
     let itemHeight: CGFloat
     let itemSpacing: CGFloat
+    /// Panel padding around the strip (and caption row), per side.
+    let panelPaddingX: CGFloat
+    let panelPaddingY: CGFloat
+    let panelCornerRadius: CGFloat
 
     /// Total strip width for `count` cells.
     func stripWidth(count: Int) -> CGFloat {
         guard count > 0 else { return 0 }
         return CGFloat(count) * itemWidth + CGFloat(count - 1) * itemSpacing
+    }
+
+    /// Panel width that shows `count` cells without scrolling.
+    func panelWidth(count: Int) -> CGFloat {
+        stripWidth(count: count) + 2 * panelPaddingX
     }
 }
 
