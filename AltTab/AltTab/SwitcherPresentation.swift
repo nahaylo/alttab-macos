@@ -62,12 +62,14 @@ enum SwitcherStyle: String, CaseIterable {
     /// Native proportions, all relative to the icon edge (measured off the
     /// Dock's switcher): the selection highlight is a fifth larger than the
     /// icon, highlights sit a tenth of an icon apart, and the panel's side
-    /// padding is about a third of an icon.
+    /// padding is a fifth of an icon beyond the outer highlights.
     static let highlightScale: CGFloat = 1.2
     static let gapScale: CGFloat = 0.1
-    static let sidePaddingScale: CGFloat = 0.3
+    static let sidePaddingScale: CGFloat = 0.2
     /// Breathing room between the highlight and the cell edge, per side.
-    static let highlightInset: CGFloat = 2
+    static let highlightInset: CGFloat = 0
+    /// Vertical panel padding above the highlights and below the caption.
+    static let iconsPanelPaddingY: CGFloat = 8
 
     /// Fraction of the screen width the panel may occupy. The native switcher
     /// runs nearly edge to edge, which is how it keeps icons large with many
@@ -101,7 +103,8 @@ enum SwitcherStyle: String, CaseIterable {
             let sidePadding = (icon * Self.sidePaddingScale).rounded()
             let side = highlight + 2 * Self.highlightInset
             return CellMetrics(iconSize: icon, highlightSize: highlight, itemWidth: side, itemHeight: side,
-                               itemSpacing: gap, panelPaddingX: sidePadding, panelPaddingY: 12, panelCornerRadius: 28)
+                               itemSpacing: gap, panelPaddingX: sidePadding, panelPaddingY: Self.iconsPanelPaddingY,
+                               panelCornerRadius: 28)
         }
     }
 
@@ -112,7 +115,7 @@ enum SwitcherStyle: String, CaseIterable {
     var captionRowHeight: CGFloat {
         switch self {
         case .thumbnails: return 0
-        case .icons: return 22
+        case .icons: return 20
         }
     }
 
