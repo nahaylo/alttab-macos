@@ -18,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **CI runs the unit tests**: `swift test` now gates the release workflow (before anything is built) and runs on every push and pull request via the new `tests.yml`. Until now the suite was only ever compiled, never executed in CI.
 - **New defaults**: Group by Application on, Style Icons, Background System — out of the box the switcher now looks and lists like the built-in Cmd-Tab (Switcher Key stays Option by default; set it to Command to replace the system switcher). Anyone who never changed these settings gets the new look; an explicit choice is kept. Solid, the WCAG AA-tested background, is still one click away.
 - While a switcher session is active, **every other keyDown is swallowed** (previously passed through). The modifier is still held, so a leaked key would reach the frontmost app as a chord — with Command as the modifier that was a fumbled Cmd-Q/Cmd-W on the wrong window.
 
