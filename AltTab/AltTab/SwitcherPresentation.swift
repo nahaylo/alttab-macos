@@ -66,7 +66,9 @@ enum SwitcherStyle: String, CaseIterable {
     /// grid), so every proportion below is relative to the artwork and the
     /// image frame is enlarged to compensate — sizing to the frame made all
     /// the paddings come out a quarter too big.
-    static let maxIconSize: CGFloat = 128
+    /// 111pt visible is the Dock switcher's ceiling as measured: with room to
+    /// spare it narrows the panel rather than growing the icons further.
+    static let maxIconSize: CGFloat = 111
     static let minIconSize: CGFloat = 48
     static let iconArtworkFraction: CGFloat = 0.8
     /// Native proportions, relative to the visible icon edge (measured off

@@ -101,7 +101,7 @@ final class SwitcherPresentationTests: XCTestCase {
     /// not collapse back to the old 96pt cell.
     func testFifteenAppsOnAWideDisplayKeepLargeIcons() {
         let m = SwitcherStyle.icons.metrics(count: 15, maxPanelWidth: 2560 * SwitcherStyle.icons.maxPanelWidthFraction)
-        XCTAssertGreaterThanOrEqual(m.iconSize, 112)
+        XCTAssertEqual(m.iconSize, SwitcherStyle.maxIconSize, "room to spare → native ceiling, not a bigger icon")
     }
 
     /// Pixel-measured off the Dock's switcher on a 2560pt display with 17

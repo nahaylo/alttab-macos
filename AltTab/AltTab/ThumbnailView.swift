@@ -269,15 +269,17 @@ final class ThumbnailView: NSView {
     override func layout() {
         super.layout()
         guard let pill = badgeView, let label = badgeLabel else { return }
-        // Native: badge diameter ~0.28 of the icon, centred on the artwork's
-        // top-right corner; multi-character text widens it into a pill.
+        // Native (pixel-measured): badge diameter ~0.31 of the icon, centred
+        // ~0.08 icon inward from the artwork's top-right corner; multi-
+        // character text widens it into a pill.
         let icon = metrics.iconSize
-        let diameter = max(18, (icon * 0.28).rounded())
+        let diameter = max(18, (icon * 0.31).rounded())
         label.font = NSFont.systemFont(ofSize: (diameter * 0.58).rounded(), weight: .bold)
         label.sizeToFit()
         let width = max(diameter, label.frame.width + diameter * 0.5)
-        let cornerX = bounds.midX + icon / 2
-        let cornerY = bounds.midY + icon / 2
+        let inset = (icon * 0.08).rounded()
+        let cornerX = bounds.midX + icon / 2 - inset
+        let cornerY = bounds.midY + icon / 2 - inset
         pill.frame = NSRect(x: (cornerX - width / 2).rounded(), y: (cornerY - diameter / 2).rounded(),
                             width: width, height: diameter)
         pill.layer?.cornerRadius = diameter / 2
