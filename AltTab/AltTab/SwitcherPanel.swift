@@ -82,14 +82,21 @@ final class SwitcherPanel: NSPanel {
     private var metrics = SwitcherStyle.defaultStyle.metrics(count: 0, maxPanelWidth: 0)
 
     private var scrollView: NSScrollView!
+    /// The scroll view's document: the strip plus the panel padding around
+    /// it. The scroll view itself fills the panel, so cell content that
+    /// overhangs its cell (badges, the icon frame's transparent margin) is
+    /// never clipped at the strip's edge — only at the panel's.
+    private var stripDocument: NSView!
     private var stackView: NSStackView!
     private var stackHeightConstraint: NSLayoutConstraint!
-    /// Scroll view insets from the background root: the panel padding, plus
-    /// the caption row at the bottom. Re-tuned per style on every show().
-    private var scrollTopConstraint: NSLayoutConstraint?
-    private var scrollBottomConstraint: NSLayoutConstraint?
-    private var scrollLeadingConstraint: NSLayoutConstraint?
-    private var scrollTrailingConstraint: NSLayoutConstraint?
+    /// Strip insets inside the document: the panel padding, plus the caption
+    /// row at the bottom. Re-tuned per style on every show().
+    private var stackTopConstraint: NSLayoutConstraint!
+    private var stackBottomConstraint: NSLayoutConstraint!
+    private var stackLeadingConstraint: NSLayoutConstraint!
+    private var stackTrailingConstraint: NSLayoutConstraint!
+    /// Dock badges per pid for the current session (applied on every rebuild).
+    private var badges: [pid_t: String] = [:]
     /// Icons style: the selected item's caption, floating under its icon at
     /// panel level (frame-positioned, clamped to the panel) so a long name
     /// is never truncated to the 120pt cell like the native switcher.
@@ -138,14 +145,23 @@ final class SwitcherPanel: NSPanel {
         stackView.spacing = metrics.itemSpacing
         stackView.translatesAutoresizingMaskIntoConstraints = false
 
-        scrollView.documentView = stackView
+        stripDocument = NSView()
+        stripDocument.translatesAutoresizingMaskIntoConstraints = false
+        stripDocument.addSubview(stackView)
+        scrollView.documentView = stripDocument
         stackHeightConstraint = stackView.heightAnchor.constraint(equalToConstant: metrics.itemHeight)
+        stackTopConstraint = stackView.topAnchor.constraint(equalTo: stripDocument.topAnchor)
+        stackBottomConstraint = stackView.bottomAnchor.constraint(equalTo: stripDocument.bottomAnchor)
+        stackLeadingConstraint = stackView.leadingAnchor.constraint(equalTo: stripDocument.leadingAnchor)
+        stackTrailingConstraint = stackView.trailingAnchor.constraint(equalTo: stripDocument.trailingAnchor)
         NSLayoutConstraint.activate([
-            stackView.topAnchor.constraint(equalTo: scrollView.contentView.topAnchor),
-            stackView.bottomAnchor.constraint(equalTo: scrollView.contentView.bottomAnchor),
-            stackView.leadingAnchor.constraint(equalTo: scrollView.contentView.leadingAnchor),
+            stripDocument.topAnchor.constraint(equalTo: scrollView.contentView.topAnchor),
+            stripDocument.bottomAnchor.constraint(equalTo: scrollView.contentView.bottomAnchor),
+            stripDocument.leadingAnchor.constraint(equalTo: scrollView.contentView.leadingAnchor),
+            stackTopConstraint, stackBottomConstraint, stackLeadingConstraint, stackTrailingConstraint,
             stackHeightConstraint,
         ])
+        applyStripInsets()
 
         captionLabel.font = NSFont.systemFont(ofSize: 13, weight: .semibold)
         captionLabel.textColor = .labelColor
@@ -287,16 +303,13 @@ final class SwitcherPanel: NSPanel {
         contentView = root
         scrollHost.addSubview(scrollView)
         scrollHost.addSubview(captionLabel)
-        let top = scrollView.topAnchor.constraint(equalTo: scrollHost.topAnchor, constant: 0)
-        let bottom = scrollView.bottomAnchor.constraint(equalTo: scrollHost.bottomAnchor, constant: 0)
-        let leading = scrollView.leadingAnchor.constraint(equalTo: scrollHost.leadingAnchor, constant: 0)
-        let trailing = scrollView.trailingAnchor.constraint(equalTo: scrollHost.trailingAnchor, constant: 0)
-        scrollTopConstraint = top
-        scrollBottomConstraint = bottom
-        scrollLeadingConstraint = leading
-        scrollTrailingConstraint = trailing
-        NSLayoutConstraint.activate([top, bottom, leading, trailing])
-        applyScrollInsets()
+        // The scroll view fills the panel; padding lives inside its document.
+        NSLayoutConstraint.activate([
+            scrollView.topAnchor.constraint(equalTo: scrollHost.topAnchor),
+            scrollView.bottomAnchor.constraint(equalTo: scrollHost.bottomAnchor),
+            scrollView.leadingAnchor.constraint(equalTo: scrollHost.leadingAnchor),
+            scrollView.trailingAnchor.constraint(equalTo: scrollHost.trailingAnchor),
+        ])
         installedStyle = style
         installedGlassStrength = glassStrength
         installedFollowsSystem = followsSystem
@@ -304,11 +317,11 @@ final class SwitcherPanel: NSPanel {
     }
 
     /// Insets the strip by the current metrics' padding (plus the caption row).
-    private func applyScrollInsets() {
-        scrollTopConstraint?.constant = metrics.panelPaddingY
-        scrollBottomConstraint?.constant = -(metrics.panelPaddingBottom + metrics.captionRowHeight)
-        scrollLeadingConstraint?.constant = metrics.panelPaddingX
-        scrollTrailingConstraint?.constant = -metrics.panelPaddingX
+    private func applyStripInsets() {
+        stackTopConstraint.constant = metrics.panelPaddingY
+        stackBottomConstraint.constant = -(metrics.panelPaddingBottom + metrics.captionRowHeight)
+        stackLeadingConstraint.constant = metrics.panelPaddingX
+        stackTrailingConstraint.constant = -metrics.panelPaddingX
     }
 
     // MARK: - Public API
@@ -350,6 +363,7 @@ final class SwitcherPanel: NSPanel {
             stackView.addArrangedSubview(view)
             thumbnailViews.append(view)
             view.isSelected = (index == selectedIndex)
+            view.setBadge(badges[windowInfo.ownerPID])
         }
 
         // Size and position the panel.
@@ -377,6 +391,15 @@ final class SwitcherPanel: NSPanel {
         positionCaption()
     }
 
+    /// Applies Dock badges (text per pid) to the cells and keeps them for
+    /// rebuilds within this session; dismiss() clears them.
+    func updateBadges(_ badges: [pid_t: String]) {
+        self.badges = badges
+        for view in thumbnailViews {
+            view.setBadge(badges[view.ownerPID])
+        }
+    }
+
     /// Patches a captured preview into its cell without rebuilding the panel.
     func updateThumbnail(windowID: CGWindowID, image: NSImage) {
         guard let index = windowIDs.firstIndex(of: windowID),
@@ -391,6 +414,7 @@ final class SwitcherPanel: NSPanel {
         windowIDs.removeAll()
         captions.removeAll()
         captionLabel.isHidden = true
+        badges.removeAll()
     }
 
     // MARK: - Private
@@ -416,7 +440,7 @@ final class SwitcherPanel: NSPanel {
         metrics = style.metrics(count: count, maxPanelWidth: maxPanelWidth)
         stackView.spacing = metrics.itemSpacing
         stackHeightConstraint.constant = metrics.itemHeight
-        applyScrollInsets()
+        applyStripInsets()
     }
 
     /// Icons style: lays the selected item's caption out in the caption row,
@@ -460,7 +484,9 @@ final class SwitcherPanel: NSPanel {
     private func scrollToSelected() {
         guard selectedIndex < thumbnailViews.count else { return }
         let view = thumbnailViews[selectedIndex]
-        scrollView.contentView.scrollToVisible(view.frame)
+        // Cell frames are in stack coordinates; the document is the strip
+        // plus padding, so convert before asking the clip view to scroll.
+        scrollView.contentView.scrollToVisible(view.convert(view.bounds, to: stripDocument))
     }
 
     private func handleClick(index: Int) {

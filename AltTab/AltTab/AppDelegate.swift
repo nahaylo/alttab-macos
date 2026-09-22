@@ -27,6 +27,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, HotkeyDelegate {
     private var hotkeyManager: HotkeyManager!
     private var windowModel: WindowModel!
     private var windowCapture: WindowCapture!
+    private let dockBadgeReader = DockBadgeReader()
     private var switcherPanel: SwitcherPanel!
     private var permissionManager: PermissionManager!
 
@@ -156,6 +157,22 @@ class AppDelegate: NSObject, NSApplicationDelegate, HotkeyDelegate {
             guard let self = self, self.switcherActive, self.switchSession == session else { return }
             self.reconcile(with: fresh)
             self.startPreviewCapture(session: session)
+        }
+        loadDockBadges(session: session)
+    }
+
+    /// Icons style only: fetch the Dock badges off the main thread and patch
+    /// them into the panel, guarded like every other session-scoped async.
+    private func loadDockBadges(session: Int) {
+        guard PreferencesMenu.currentStyle == .icons else { return }
+        dockBadgeReader.read { [weak self] items in
+            guard let self = self, self.switcherActive, self.switchSession == session else { return }
+            let pids = Set(self.currentWindows.map { $0.ownerPID })
+            let apps = pids.map { pid -> DockBadges.App in
+                let app = NSRunningApplication(processIdentifier: pid)
+                return DockBadges.App(pid: pid, bundlePath: app?.bundleURL?.path, name: app?.localizedName ?? "")
+            }
+            self.switcherPanel.updateBadges(DockBadges.match(items: items, apps: apps))
         }
     }
 

@@ -169,6 +169,42 @@ final class SwitcherPresentationTests: XCTestCase {
         XCTAssertTrue(AppGrouping.collapse([Win]()) { $0.pid }.isEmpty)
     }
 
+    // MARK: - DockBadges
+
+    private let dockItems = [
+        DockBadges.Item(bundlePath: "/Applications/Slack.app", title: "Slack", badge: "•"),
+        DockBadges.Item(bundlePath: "/Applications/Mail.app", title: "Mail", badge: "12"),
+        DockBadges.Item(bundlePath: "/Applications/Safari.app", title: "Safari", badge: nil),
+        DockBadges.Item(bundlePath: "/Applications/Notes.app", title: "Notes", badge: "  "),
+        DockBadges.Item(bundlePath: nil, title: "Visual Studio Code", badge: "1"),
+    ]
+
+    func testBadgesMatchByBundlePath() {
+        let apps = [DockBadges.App(pid: 10, bundlePath: "/Applications/Mail.app", name: "Mail"),
+                    DockBadges.App(pid: 20, bundlePath: "/Applications/Slack.app", name: "Slack")]
+        XCTAssertEqual(DockBadges.match(items: dockItems, apps: apps), [10: "12", 20: "•"])
+    }
+
+    func testBadgesFallBackToTitleWhenTheDockGaveNoPath() {
+        let apps = [DockBadges.App(pid: 30, bundlePath: "/Applications/Visual Studio Code.app", name: "Visual Studio Code")]
+        XCTAssertEqual(DockBadges.match(items: dockItems, apps: apps), [30: "1"])
+    }
+
+    func testUnbadgedBlankAndUnknownAppsProduceNoEntry() {
+        let apps = [DockBadges.App(pid: 1, bundlePath: "/Applications/Safari.app", name: "Safari"),
+                    DockBadges.App(pid: 2, bundlePath: "/Applications/Notes.app", name: "Notes"),
+                    DockBadges.App(pid: 3, bundlePath: "/Applications/Nope.app", name: "Nope")]
+        XCTAssertTrue(DockBadges.match(items: dockItems, apps: apps).isEmpty)
+    }
+
+    /// The path match wins even when a differently-named item shares the title.
+    func testBundlePathTakesPrecedenceOverTitle() {
+        let items = [DockBadges.Item(bundlePath: "/Applications/A.app", title: "Mail", badge: "7"),
+                     DockBadges.Item(bundlePath: "/Applications/Mail.app", title: "Mail", badge: "2")]
+        let apps = [DockBadges.App(pid: 5, bundlePath: "/Applications/Mail.app", name: "Mail")]
+        XCTAssertEqual(DockBadges.match(items: items, apps: apps), [5: "2"])
+    }
+
     // MARK: - AppGrouping.representative
 
     func testRepresentativeIsTheWindowItselfWhenItSurvivedTheCollapse() {

@@ -9,9 +9,11 @@
 //    application name; the selected cell gets an accent-colored border and a
 //    subtle background tint.
 //  - Icons: the native Cmd-Tab look — one large app icon with a filled
-//    rounded highlight behind the selected one. Minimized windows dim. The
-//    caption under the selected icon is drawn by SwitcherPanel, not the cell,
-//    so it can span the panel instead of truncating at the cell width.
+//    rounded highlight behind the selected one, and the app's Dock badge
+//    (unread count / dot) at the artwork's top-right corner. Minimized
+//    windows dim. The caption under the selected icon is drawn by
+//    SwitcherPanel, not the cell, so it can span the panel instead of
+//    truncating at the cell width.
 //
 //  Supports mouse hover and click interaction for direct window selection.
 //
@@ -43,8 +45,11 @@ final class ThumbnailView: NSView {
         return color
     }
 
+    let ownerPID: pid_t
     private let style: SwitcherStyle
     private let metrics: CellMetrics
+    private var badgeView: NSView?
+    private var badgeLabel: NSTextField?
     private let imageView: NSImageView
     private let titleLabel: NSTextField
     private let appLabel: NSTextField
@@ -53,6 +58,7 @@ final class ThumbnailView: NSView {
     private let isMinimized: Bool
 
     init(windowInfo: WindowInfo, style: SwitcherStyle, metrics: CellMetrics) {
+        self.ownerPID = windowInfo.ownerPID
         self.style = style
         self.metrics = metrics
         self.isMinimized = windowInfo.isMinimized
@@ -227,6 +233,56 @@ final class ThumbnailView: NSView {
             }
         }
         #endif
+    }
+
+    // MARK: - Badge (Icons style)
+
+    /// Shows the app's Dock badge — a red pill with the text — at the visible
+    /// artwork's top-right corner like the native switcher; nil removes it.
+    /// Thumbnails style ignores badges (its image is a window preview).
+    func setBadge(_ text: String?) {
+        guard style == .icons else { return }
+        guard let text = text, !text.isEmpty else {
+            badgeView?.removeFromSuperview()
+            badgeView = nil
+            badgeLabel = nil
+            return
+        }
+        if badgeView == nil {
+            let pill = NSView()
+            pill.wantsLayer = true
+            pill.layer?.backgroundColor = NSColor.systemRed.cgColor
+            let label = NSTextField(labelWithString: "")
+            label.textColor = .white
+            label.alignment = .center
+            label.lineBreakMode = .byClipping
+            label.maximumNumberOfLines = 1
+            pill.addSubview(label)
+            addSubview(pill)
+            badgeView = pill
+            badgeLabel = label
+        }
+        badgeLabel?.stringValue = text
+        needsLayout = true
+    }
+
+    override func layout() {
+        super.layout()
+        guard let pill = badgeView, let label = badgeLabel else { return }
+        // Native: badge diameter ~0.28 of the icon, centred on the artwork's
+        // top-right corner; multi-character text widens it into a pill.
+        let icon = metrics.iconSize
+        let diameter = max(18, (icon * 0.28).rounded())
+        label.font = NSFont.systemFont(ofSize: (diameter * 0.58).rounded(), weight: .bold)
+        label.sizeToFit()
+        let width = max(diameter, label.frame.width + diameter * 0.5)
+        let cornerX = bounds.midX + icon / 2
+        let cornerY = bounds.midY + icon / 2
+        pill.frame = NSRect(x: (cornerX - width / 2).rounded(), y: (cornerY - diameter / 2).rounded(),
+                            width: width, height: diameter)
+        pill.layer?.cornerRadius = diameter / 2
+        label.frame = NSRect(x: 0, y: ((diameter - label.frame.height) / 2).rounded(),
+                             width: width, height: label.frame.height)
     }
 
     /// Replaces the app-icon placeholder with a captured window preview.

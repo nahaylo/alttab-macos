@@ -17,6 +17,9 @@
 //    to one representative window per app — the first (most recent) one — so
 //    the list reads as apps ordered by their latest use, exactly what the
 //    system app switcher shows. Confirming a group activates that window.
+//  - DockBadges: matches the Dock's application items (read via Accessibility
+//    by DockBadgeReader) to the switcher's apps and yields the badge text to
+//    draw on each icon, as the native switcher does.
 //
 //  Author:  Sergio Farfan <sergio.farfan@gmail.com>
 //  License: MIT
@@ -24,6 +27,7 @@
 
 import CoreGraphics
 import Darwin
+import Foundation
 
 // MARK: - SwitcherStyle
 
@@ -199,6 +203,41 @@ struct CellMetrics: Equatable {
     /// Panel height: strip, caption row and vertical padding.
     var panelHeight: CGFloat {
         panelPaddingY + itemHeight + captionRowHeight + panelPaddingBottom
+    }
+}
+
+// MARK: - DockBadges
+
+enum DockBadges {
+
+    /// One application item of the Dock, as read from its Accessibility tree.
+    struct Item: Equatable {
+        /// Bundle path from the item's AXURL (nil if the Dock gave none).
+        let bundlePath: String?
+        /// AXTitle — the app's display name.
+        let title: String
+        /// AXStatusLabel — the badge text ("3", "•"); nil/empty when unbadged.
+        let badge: String?
+    }
+
+    /// A switcher app to look up.
+    struct App: Equatable {
+        let pid: pid_t
+        let bundlePath: String?
+        let name: String
+    }
+
+    /// Badge text per pid. An app matches its Dock item by bundle path first
+    /// (exact), falling back to the title, and only non-blank badges count.
+    static func match(items: [Item], apps: [App]) -> [pid_t: String] {
+        var badges: [pid_t: String] = [:]
+        for app in apps {
+            let byPath = app.bundlePath.flatMap { path in items.first { $0.bundlePath == path } }
+            let item = byPath ?? items.first { $0.title == app.name }
+            guard let badge = item?.badge?.trimmingCharacters(in: .whitespacesAndNewlines), !badge.isEmpty else { continue }
+            badges[app.pid] = badge
+        }
+        return badges
     }
 }
 
