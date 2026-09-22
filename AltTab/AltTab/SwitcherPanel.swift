@@ -304,7 +304,7 @@ final class SwitcherPanel: NSPanel {
     /// Insets the strip by the current metrics' padding (plus the caption row).
     private func applyScrollInsets() {
         scrollTopConstraint?.constant = metrics.panelPaddingY
-        scrollBottomConstraint?.constant = -(metrics.panelPaddingY + style.captionRowHeight)
+        scrollBottomConstraint?.constant = -(metrics.panelPaddingBottom + metrics.captionRowHeight)
         scrollLeadingConstraint?.constant = metrics.panelPaddingX
         scrollTrailingConstraint?.constant = -metrics.panelPaddingX
     }
@@ -350,7 +350,7 @@ final class SwitcherPanel: NSPanel {
 
         // Size and position the panel.
         let panelWidth = min(maxPanelWidth, metrics.panelWidth(count: windows.count))
-        let panelHeight = metrics.itemHeight + style.captionRowHeight + metrics.panelPaddingY * 2
+        let panelHeight = metrics.panelHeight
 
         let panelX = screen.frame.midX - panelWidth / 2
         let panelY = screen.frame.midY - panelHeight / 2
@@ -405,7 +405,7 @@ final class SwitcherPanel: NSPanel {
     /// the text, so it spans neighbouring cells rather than truncating; only
     /// a name wider than the whole panel is (middle-)truncated.
     private func positionCaption() {
-        guard style.captionRowHeight > 0, selectedIndex < thumbnailViews.count,
+        guard metrics.captionRowHeight > 0, selectedIndex < thumbnailViews.count,
               selectedIndex < captions.count, let host = captionLabel.superview else {
             captionLabel.isHidden = true
             return
@@ -423,9 +423,9 @@ final class SwitcherPanel: NSPanel {
         let minX = padX
         let maxX = host.bounds.width - padX - size.width
         let x = min(max(cellInHost.midX - size.width / 2, minX), maxX)
-        // Hug the icon: top of the caption row, so the gap is just the
-        // highlight inset plus the row's slack above the text.
-        let y = metrics.panelPaddingY + max(0, style.captionRowHeight - size.height - 2)
+        // The text sits at the bottom of the caption row, i.e. captionGapScale
+        // of an icon under the artwork, with panelPaddingBottom beneath it.
+        let y = metrics.panelPaddingBottom
         captionLabel.frame = NSRect(x: x, y: y, width: size.width, height: size.height)
     }
 

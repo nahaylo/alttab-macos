@@ -46,7 +46,7 @@ final class SwitcherPresentationTests: XCTestCase {
         XCTAssertEqual(few.panelPaddingX, 20, "original panel padding preserved")
         XCTAssertEqual(few.panelPaddingY, 20)
         XCTAssertEqual(few.panelCornerRadius, 16, "original panel corners preserved")
-        XCTAssertEqual(SwitcherStyle.thumbnails.captionRowHeight, 0, "thumbnails label inside the cell")
+        XCTAssertEqual(few.captionRowHeight, 0, "thumbnails label inside the cell")
     }
 
     func testIconsUseTheLargestIconWhenTheRowFits() {
@@ -57,7 +57,8 @@ final class SwitcherPresentationTests: XCTestCase {
         XCTAssertGreaterThan(m.iconFrame, m.iconSize, "frame includes the artwork's transparent margin")
         XCTAssertGreaterThan(m.highlightSize, m.iconSize, "highlight surrounds the visible icon")
         XCTAssertGreaterThanOrEqual(m.itemHeight, m.highlightSize, "highlight must fit the cell")
-        XCTAssertGreaterThan(SwitcherStyle.icons.captionRowHeight, 0, "caption row is where the selected name goes")
+        XCTAssertGreaterThan(m.captionRowHeight, 0, "caption row is where the selected name goes")
+        XCTAssertEqual(m.panelHeight, m.panelPaddingY + m.itemHeight + m.captionRowHeight + m.panelPaddingBottom)
     }
 
     /// Native proportions, measured against the VISIBLE artwork: highlight,
@@ -84,6 +85,16 @@ final class SwitcherPresentationTests: XCTestCase {
         XCTAssertEqual(SwitcherStyle.thumbnails.maxPanelWidthFraction, 0.85)
         XCTAssertGreaterThan(SwitcherStyle.icons.maxPanelWidthFraction, SwitcherStyle.thumbnails.maxPanelWidthFraction)
         XCTAssertLessThanOrEqual(SwitcherStyle.icons.maxPanelWidthFraction, 1.0)
+    }
+
+    /// Native puts the caption ~0.18 icon under the artwork and ends the
+    /// panel ~0.1 icon under the text.
+    func testIconsCaptionSitsAtNativeDistanceBelowTheArtwork() {
+        let m = SwitcherStyle.icons.metrics(count: 5, maxPanelWidth: 3000)
+        let artworkBottomToCaptionTop = (m.iconFrame - m.iconSize) / 2 + m.captionRowHeight - SwitcherStyle.captionTextHeight
+        XCTAssertEqual(artworkBottomToCaptionTop, m.iconSize * SwitcherStyle.captionGapScale, accuracy: 1.5)
+        XCTAssertEqual(m.panelPaddingBottom, (m.iconSize * SwitcherStyle.bottomPaddingScale).rounded())
+        XCTAssertLessThan(m.panelPaddingBottom, m.panelPaddingY, "native is tighter below the caption than above the icons")
     }
 
     /// The case that motivated the retune: ~15 apps on a 2560pt display must
@@ -115,11 +126,13 @@ final class SwitcherPresentationTests: XCTestCase {
 
     func testStripAndPanelWidthArithmetic() {
         let m = CellMetrics(iconSize: 0, iconFrame: 0, highlightSize: 0, itemWidth: 100, itemHeight: 100,
-                            itemSpacing: 10, panelPaddingX: 15, panelPaddingY: 5, panelCornerRadius: 8)
+                            itemSpacing: 10, panelPaddingX: 15, panelPaddingY: 5, panelPaddingBottom: 7,
+                            captionRowHeight: 20, panelCornerRadius: 8)
         XCTAssertEqual(m.stripWidth(count: 0), 0)
         XCTAssertEqual(m.stripWidth(count: 1), 100)
         XCTAssertEqual(m.stripWidth(count: 3), 320)
         XCTAssertEqual(m.panelWidth(count: 3), 350)
+        XCTAssertEqual(m.panelHeight, 132)
     }
 
     /// Grouped lists are apps → app name (like the system switcher);

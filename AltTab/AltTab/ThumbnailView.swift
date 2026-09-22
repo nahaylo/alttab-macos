@@ -254,7 +254,7 @@ final class ThumbnailView: NSView {
 
             case .icons:
                 selectionView.layer?.backgroundColor = isSelected
-                    ? NSColor.labelColor.withAlphaComponent(0.12).cgColor
+                    ? NSColor.labelColor.withAlphaComponent(0.09).cgColor
                     : NSColor.clear.cgColor
             }
         }

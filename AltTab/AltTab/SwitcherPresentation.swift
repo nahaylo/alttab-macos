@@ -74,6 +74,13 @@ enum SwitcherStyle: String, CaseIterable {
     static let gapScale: CGFloat = 0.15
     static let sidePaddingScale: CGFloat = 0.26
     static let topPaddingScale: CGFloat = 0.33
+    /// Below the icon: the caption's top sits captionGapScale of an icon
+    /// under the artwork, and the panel ends bottomPaddingScale under the
+    /// caption text (native runs tight there).
+    static let captionGapScale: CGFloat = 0.18
+    static let bottomPaddingScale: CGFloat = 0.1
+    /// Caption text height budget (13pt system font).
+    static let captionTextHeight: CGFloat = 16
 
     /// Fraction of the screen width the panel may occupy. The native switcher
     /// runs nearly edge to edge, which is how it keeps icons large with many
@@ -94,7 +101,8 @@ enum SwitcherStyle: String, CaseIterable {
         switch self {
         case .thumbnails:
             return CellMetrics(iconSize: 0, iconFrame: 0, highlightSize: 0, itemWidth: 180, itemHeight: 160,
-                               itemSpacing: 12, panelPaddingX: 20, panelPaddingY: 20, panelCornerRadius: 16)
+                               itemSpacing: 12, panelPaddingX: 20, panelPaddingY: 20, panelPaddingBottom: 20,
+                               captionRowHeight: 0, panelCornerRadius: 16)
         case .icons:
             let n = CGFloat(max(1, count))
             // Everything in units of the visible icon edge v. The cell is the
@@ -110,12 +118,18 @@ enum SwitcherStyle: String, CaseIterable {
 
             func build(_ visible: CGFloat) -> CellMetrics {
                 let frame = (visible * frameScale).rounded()
+                // The caption row starts at the cell's bottom edge, which is
+                // already frameMargin below the artwork.
+                let captionRow = max(Self.captionTextHeight,
+                                     (visible * (Self.captionGapScale - frameMarginScale)).rounded() + Self.captionTextHeight)
                 return CellMetrics(iconSize: visible, iconFrame: frame,
                                    highlightSize: (visible * Self.highlightScale).rounded(),
                                    itemWidth: frame, itemHeight: frame,
                                    itemSpacing: max(0, (visible * cellGapScale).rounded()),
                                    panelPaddingX: max(0, (visible * edgePadScale).rounded()),
                                    panelPaddingY: max(4, (visible * (Self.topPaddingScale - frameMarginScale)).rounded()),
+                                   panelPaddingBottom: max(4, (visible * Self.bottomPaddingScale).rounded()),
+                                   captionRowHeight: captionRow,
                                    panelCornerRadius: 28)
             }
 
@@ -128,17 +142,6 @@ enum SwitcherStyle: String, CaseIterable {
                 metrics = build(visible)
             }
             return metrics
-        }
-    }
-
-    /// Height of the caption row the panel reserves below the strip. Icons
-    /// style draws the selected item's caption there (full width, no cell
-    /// clipping — the native switcher does the same); Thumbnails puts its
-    /// labels inside the cell and needs none.
-    var captionRowHeight: CGFloat {
-        switch self {
-        case .thumbnails: return 0
-        case .icons: return 14
         }
     }
 
@@ -168,9 +171,15 @@ struct CellMetrics: Equatable {
     let itemWidth: CGFloat
     let itemHeight: CGFloat
     let itemSpacing: CGFloat
-    /// Panel padding around the strip (and caption row), per side.
+    /// Panel padding: sides, above the strip, and below the caption row.
     let panelPaddingX: CGFloat
     let panelPaddingY: CGFloat
+    let panelPaddingBottom: CGFloat
+    /// Height of the caption row the panel reserves below the strip. Icons
+    /// style draws the selected item's caption there (full width, no cell
+    /// clipping — the native switcher does the same); Thumbnails puts its
+    /// labels inside the cell and needs none (0).
+    let captionRowHeight: CGFloat
     let panelCornerRadius: CGFloat
 
     /// Total strip width for `count` cells.
@@ -182,6 +191,11 @@ struct CellMetrics: Equatable {
     /// Panel width that shows `count` cells without scrolling.
     func panelWidth(count: Int) -> CGFloat {
         stripWidth(count: count) + 2 * panelPaddingX
+    }
+
+    /// Panel height: strip, caption row and vertical padding.
+    var panelHeight: CGFloat {
+        panelPaddingY + itemHeight + captionRowHeight + panelPaddingBottom
     }
 }
 
