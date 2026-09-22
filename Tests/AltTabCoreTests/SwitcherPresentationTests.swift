@@ -53,20 +53,27 @@ final class SwitcherPresentationTests: XCTestCase {
         let m = SwitcherStyle.icons.metrics(count: 5, maxPanelWidth: 1500)
         XCTAssertEqual(m.iconSize, SwitcherStyle.maxIconSize)
         XCTAssertEqual(m.itemWidth, m.itemHeight, "icon cells are square")
-        XCTAssertGreaterThan(m.highlightSize, m.iconSize, "highlight surrounds the icon")
+        XCTAssertEqual(m.itemWidth, m.iconFrame, "the cell is the image frame")
+        XCTAssertGreaterThan(m.iconFrame, m.iconSize, "frame includes the artwork's transparent margin")
+        XCTAssertGreaterThan(m.highlightSize, m.iconSize, "highlight surrounds the visible icon")
         XCTAssertGreaterThanOrEqual(m.itemHeight, m.highlightSize, "highlight must fit the cell")
         XCTAssertGreaterThan(SwitcherStyle.icons.captionRowHeight, 0, "caption row is where the selected name goes")
     }
 
-    /// Native proportions: highlight, gap and side padding all scale with the
-    /// icon, so a shrunken row keeps the same look rather than cramming.
-    func testIconsProportionsScaleWithTheIcon() {
+    /// Native proportions, measured against the VISIBLE artwork: highlight,
+    /// highlight-to-highlight gap and panel-edge-to-highlight padding all
+    /// scale with it, so a shrunken row keeps the same look.
+    func testIconsProportionsScaleWithTheVisibleIcon() {
         let big = SwitcherStyle.icons.metrics(count: 3, maxPanelWidth: 3000)
         let small = SwitcherStyle.icons.metrics(count: 60, maxPanelWidth: 800)
         for m in [big, small] {
-            XCTAssertEqual(m.highlightSize, (m.iconSize * SwitcherStyle.highlightScale).rounded())
-            XCTAssertEqual(m.itemSpacing, (m.iconSize * SwitcherStyle.gapScale).rounded())
-            XCTAssertEqual(m.panelPaddingX, (m.iconSize * SwitcherStyle.sidePaddingScale).rounded())
+            let v = m.iconSize
+            XCTAssertEqual(m.iconFrame, (v / SwitcherStyle.iconArtworkFraction).rounded())
+            XCTAssertEqual(m.highlightSize, (v * SwitcherStyle.highlightScale).rounded())
+            let highlightGap = m.itemSpacing + (m.itemWidth - m.highlightSize)
+            XCTAssertEqual(highlightGap, v * SwitcherStyle.gapScale, accuracy: 1.5)
+            let edgeToHighlight = m.panelPaddingX + (m.itemWidth - m.highlightSize) / 2
+            XCTAssertEqual(edgeToHighlight, v * SwitcherStyle.sidePaddingScale, accuracy: 1.5)
         }
         XCTAssertLessThan(small.itemSpacing, big.itemSpacing)
     }
@@ -107,8 +114,8 @@ final class SwitcherPresentationTests: XCTestCase {
     }
 
     func testStripAndPanelWidthArithmetic() {
-        let m = CellMetrics(iconSize: 0, highlightSize: 0, itemWidth: 100, itemHeight: 100, itemSpacing: 10,
-                            panelPaddingX: 15, panelPaddingY: 5, panelCornerRadius: 8)
+        let m = CellMetrics(iconSize: 0, iconFrame: 0, highlightSize: 0, itemWidth: 100, itemHeight: 100,
+                            itemSpacing: 10, panelPaddingX: 15, panelPaddingY: 5, panelCornerRadius: 8)
         XCTAssertEqual(m.stripWidth(count: 0), 0)
         XCTAssertEqual(m.stripWidth(count: 1), 100)
         XCTAssertEqual(m.stripWidth(count: 3), 320)

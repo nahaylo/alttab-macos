@@ -153,9 +153,11 @@ final class ThumbnailView: NSView {
         wantsLayer = true
         let width = metrics.itemWidth
         let height = metrics.itemHeight
-        let icon = metrics.iconSize
-        // The highlight is a rounded square a fifth larger than the icon,
-        // like the native switcher's; its radius scales with it.
+        // The image frame is larger than the visible artwork (icons carry a
+        // transparent margin); the highlight — a fifth larger than the
+        // artwork, like the native switcher's — sits inside it, and its
+        // radius scales with it.
+        let icon = metrics.iconFrame
         let highlightSize = metrics.highlightSize
 
         selectionView.wantsLayer = true

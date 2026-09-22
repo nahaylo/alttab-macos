@@ -55,21 +55,25 @@ enum SwitcherStyle: String, CaseIterable {
         self == .thumbnails
     }
 
-    /// Largest icon edge for Icons style (what the native switcher draws for
-    /// a handful of apps) and the floor it shrinks to before scrolling.
+    /// Largest VISIBLE icon edge for Icons style (what the native switcher
+    /// draws for a handful of apps) and the floor it shrinks to before
+    /// scrolling. "Visible" because macOS app icons carry a transparent
+    /// margin: the artwork fills only ~80% of the image (the 824/1024 icon
+    /// grid), so every proportion below is relative to the artwork and the
+    /// image frame is enlarged to compensate — sizing to the frame made all
+    /// the paddings come out a quarter too big.
     static let maxIconSize: CGFloat = 128
     static let minIconSize: CGFloat = 48
-    /// Native proportions, all relative to the icon edge (measured off the
-    /// Dock's switcher): the selection highlight is a fifth larger than the
-    /// icon, highlights sit a tenth of an icon apart, and the panel's side
-    /// padding is a fifth of an icon beyond the outer highlights.
+    static let iconArtworkFraction: CGFloat = 0.8
+    /// Native proportions, relative to the visible icon edge (measured off
+    /// the Dock's switcher): the selection highlight is a fifth larger than
+    /// the icon, highlights sit 0.15 icon apart (icons 0.35 apart), the panel
+    /// edge is 0.22 icon beyond the outer highlights (0.32 beyond the icon),
+    /// and the panel top sits 0.3 icon above the icon.
     static let highlightScale: CGFloat = 1.2
-    static let gapScale: CGFloat = 0.1
-    static let sidePaddingScale: CGFloat = 0.2
-    /// Breathing room between the highlight and the cell edge, per side.
-    static let highlightInset: CGFloat = 0
-    /// Vertical panel padding above the highlights and below the caption.
-    static let iconsPanelPaddingY: CGFloat = 8
+    static let gapScale: CGFloat = 0.15
+    static let sidePaddingScale: CGFloat = 0.22
+    static let topPaddingScale: CGFloat = 0.3
 
     /// Fraction of the screen width the panel may occupy. The native switcher
     /// runs nearly edge to edge, which is how it keeps icons large with many
@@ -89,22 +93,41 @@ enum SwitcherStyle: String, CaseIterable {
     func metrics(count: Int, maxPanelWidth: CGFloat) -> CellMetrics {
         switch self {
         case .thumbnails:
-            return CellMetrics(iconSize: 0, highlightSize: 0, itemWidth: 180, itemHeight: 160, itemSpacing: 12,
-                               panelPaddingX: 20, panelPaddingY: 20, panelCornerRadius: 16)
+            return CellMetrics(iconSize: 0, iconFrame: 0, highlightSize: 0, itemWidth: 180, itemHeight: 160,
+                               itemSpacing: 12, panelPaddingX: 20, panelPaddingY: 20, panelCornerRadius: 16)
         case .icons:
             let n = CGFloat(max(1, count))
-            // Width in terms of the icon edge i:
-            //   n * (highlightScale*i + 2*inset) + (n-1) * gapScale*i + 2 * sidePaddingScale*i <= maxPanelWidth
-            let perIcon = Self.highlightScale * n + Self.gapScale * (n - 1) + 2 * Self.sidePaddingScale
-            let fitted = ((maxPanelWidth - 2 * Self.highlightInset * n) / perIcon).rounded(.down)
-            let icon = min(Self.maxIconSize, max(Self.minIconSize, fitted))
-            let highlight = (icon * Self.highlightScale).rounded()
-            let gap = (icon * Self.gapScale).rounded()
-            let sidePadding = (icon * Self.sidePaddingScale).rounded()
-            let side = highlight + 2 * Self.highlightInset
-            return CellMetrics(iconSize: icon, highlightSize: highlight, itemWidth: side, itemHeight: side,
-                               itemSpacing: gap, panelPaddingX: sidePadding, panelPaddingY: Self.iconsPanelPaddingY,
-                               panelCornerRadius: 28)
+            // Everything in units of the visible icon edge v. The cell is the
+            // image frame (v / artworkFraction); the highlight sits inside it.
+            let frameScale = 1 / Self.iconArtworkFraction                    // 1.25
+            let frameOverhang = frameScale - Self.highlightScale             // frame beyond highlight, both sides
+            let cellGapScale = Self.gapScale - frameOverhang                 // cell gap giving the highlight gap
+            let edgePadScale = Self.sidePaddingScale - frameOverhang / 2     // panel edge → first cell
+            let perIcon = frameScale * n + cellGapScale * (n - 1) + 2 * edgePadScale
+            // Panel top → icon top is topPaddingScale of the icon; the frame's
+            // own margin above the artwork supplies part of that.
+            let frameMarginScale = (frameScale - 1) / 2
+
+            func build(_ visible: CGFloat) -> CellMetrics {
+                let frame = (visible * frameScale).rounded()
+                return CellMetrics(iconSize: visible, iconFrame: frame,
+                                   highlightSize: (visible * Self.highlightScale).rounded(),
+                                   itemWidth: frame, itemHeight: frame,
+                                   itemSpacing: max(0, (visible * cellGapScale).rounded()),
+                                   panelPaddingX: max(0, (visible * edgePadScale).rounded()),
+                                   panelPaddingY: max(4, (visible * (Self.topPaddingScale - frameMarginScale)).rounded()),
+                                   panelCornerRadius: 28)
+            }
+
+            var visible = min(Self.maxIconSize, max(Self.minIconSize, (maxPanelWidth / perIcon).rounded(.down)))
+            var metrics = build(visible)
+            // Rounding each part up can overflow by a few points; step down
+            // until the rounded panel really fits (or the floor is reached).
+            while metrics.panelWidth(count: count) > maxPanelWidth && visible > Self.minIconSize {
+                visible -= 1
+                metrics = build(visible)
+            }
+            return metrics
         }
     }
 
@@ -115,7 +138,7 @@ enum SwitcherStyle: String, CaseIterable {
     var captionRowHeight: CGFloat {
         switch self {
         case .thumbnails: return 0
-        case .icons: return 20
+        case .icons: return 18
         }
     }
 
@@ -134,9 +157,12 @@ enum SwitcherStyle: String, CaseIterable {
 /// Geometry of one strip cell, shared by the panel (strip sizing) and the
 /// cell view so they cannot disagree.
 struct CellMetrics: Equatable {
-    /// Icon edge (Icons style); 0 for Thumbnails, whose image area is derived
-    /// from the cell height instead.
+    /// Visible icon artwork edge (Icons style); 0 for Thumbnails, whose image
+    /// area is derived from the cell height instead.
     let iconSize: CGFloat
+    /// Edge of the image view that renders the icon — larger than `iconSize`
+    /// by the artwork's built-in transparent margin.
+    let iconFrame: CGFloat
     /// Edge of the rounded selection highlight behind the icon (Icons style).
     let highlightSize: CGFloat
     let itemWidth: CGFloat
