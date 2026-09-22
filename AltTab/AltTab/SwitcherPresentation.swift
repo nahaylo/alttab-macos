@@ -66,19 +66,19 @@ enum SwitcherStyle: String, CaseIterable {
     static let minIconSize: CGFloat = 48
     static let iconArtworkFraction: CGFloat = 0.8
     /// Native proportions, relative to the visible icon edge (measured off
-    /// the Dock's switcher): the selection highlight is a fifth larger than
-    /// the icon, highlights sit 0.15 icon apart (icons 0.35 apart), the panel
-    /// edge is 0.22 icon beyond the outer highlights (0.32 beyond the icon),
-    /// and the panel top sits 0.3 icon above the icon.
+    /// same-scale photos of the Dock's switcher): the selection highlight is
+    /// a fifth larger than the icon, highlights nearly touch (icons 0.22
+    /// apart), the panel edge is 0.16 icon beyond the outer highlights (0.25
+    /// beyond the icon), and the panel top sits 0.25 icon above the icon.
     static let highlightScale: CGFloat = 1.2
-    static let gapScale: CGFloat = 0.15
-    static let sidePaddingScale: CGFloat = 0.26
-    static let topPaddingScale: CGFloat = 0.33
+    static let gapScale: CGFloat = 0.03
+    static let sidePaddingScale: CGFloat = 0.16
+    static let topPaddingScale: CGFloat = 0.25
     /// Below the icon: the caption's top sits captionGapScale of an icon
-    /// under the artwork, and the panel ends bottomPaddingScale under the
-    /// caption text (native runs tight there).
-    static let captionGapScale: CGFloat = 0.18
-    static let bottomPaddingScale: CGFloat = 0.1
+    /// under the artwork — right at the highlight's bottom edge — and the
+    /// panel ends bottomPaddingScale under the caption text.
+    static let captionGapScale: CGFloat = 0.08
+    static let bottomPaddingScale: CGFloat = 0.08
     /// Caption text height budget (13pt system font).
     static let captionTextHeight: CGFloat = 16
 
@@ -119,9 +119,10 @@ enum SwitcherStyle: String, CaseIterable {
             func build(_ visible: CGFloat) -> CellMetrics {
                 let frame = (visible * frameScale).rounded()
                 // The caption row starts at the cell's bottom edge, which is
-                // already frameMargin below the artwork.
-                let captionRow = max(Self.captionTextHeight,
-                                     (visible * (Self.captionGapScale - frameMarginScale)).rounded() + Self.captionTextHeight)
+                // already frameMargin below the artwork — more than the native
+                // caption gap, so the row is shorter than the text and the
+                // caption overlaps the cell's transparent bottom margin.
+                let captionRow = max(0, (visible * (Self.captionGapScale - frameMarginScale)).rounded() + Self.captionTextHeight)
                 return CellMetrics(iconSize: visible, iconFrame: frame,
                                    highlightSize: (visible * Self.highlightScale).rounded(),
                                    itemWidth: frame, itemHeight: frame,
