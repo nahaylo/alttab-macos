@@ -2,9 +2,17 @@
 //  ThumbnailView.swift
 //  AltTab — Windows-style Window Switcher for macOS
 //
-//  A single window cell in the switcher strip. Displays the window thumbnail
-//  (or app icon fallback), window title, and application name. Highlights the
-//  selected cell with an accent-colored border and subtle background tint.
+//  A single cell in the switcher strip, drawn in one of two styles
+//  (SwitcherStyle):
+//
+//  - Thumbnails: the window preview (or app icon fallback), window title and
+//    application name; the selected cell gets an accent-colored border and a
+//    subtle background tint.
+//  - Icons: the native Cmd-Tab look — one large app icon, a filled rounded
+//    highlight behind the selected icon, and a single title line that is
+//    shown under the selected item only (so same-app windows stay
+//    distinguishable without cluttering the row). Minimized windows dim.
+//
 //  Supports mouse hover and click interaction for direct window selection.
 //
 //  Author:  Sergio Farfan <sergio.farfan@gmail.com>
@@ -35,23 +43,29 @@ final class ThumbnailView: NSView {
         return color
     }
 
+    private let style: SwitcherStyle
     private let imageView: NSImageView
     private let titleLabel: NSTextField
     private let appLabel: NSTextField
-    private let selectionBorder: NSView
-    private let thumbnailHeight: CGFloat
+    /// Thumbnails: the accent border. Icons: the filled selection highlight.
+    private let selectionView: NSView
+    private let isMinimized: Bool
 
-    init(windowInfo: WindowInfo, width: CGFloat, height: CGFloat) {
-        self.thumbnailHeight = height - 50 // Reserve space for labels
+    init(windowInfo: WindowInfo, style: SwitcherStyle) {
+        self.style = style
+        self.isMinimized = windowInfo.isMinimized
 
         imageView = NSImageView()
         titleLabel = NSTextField(labelWithString: "")
         appLabel = NSTextField(labelWithString: "")
-        selectionBorder = NSView()
+        selectionView = NSView()
 
-        super.init(frame: NSRect(x: 0, y: 0, width: width, height: height))
+        super.init(frame: NSRect(x: 0, y: 0, width: style.itemWidth, height: style.itemHeight))
 
-        setupViews(width: width, height: height)
+        switch style {
+        case .thumbnails: setupThumbnailViews()
+        case .icons: setupIconViews()
+        }
         configure(with: windowInfo)
     }
 
@@ -59,18 +73,21 @@ final class ThumbnailView: NSView {
         fatalError("init(coder:) not implemented")
     }
 
-    // MARK: - Setup
+    // MARK: - Setup: Thumbnails style
 
-    private func setupViews(width: CGFloat, height: CGFloat) {
+    private func setupThumbnailViews() {
         wantsLayer = true
+        let width = style.itemWidth
+        let height = style.itemHeight
+        let thumbnailHeight = height - 50 // Reserve space for labels
 
         // Selection border
-        selectionBorder.wantsLayer = true
-        selectionBorder.layer?.borderWidth = 3
-        selectionBorder.layer?.cornerRadius = 8
-        selectionBorder.layer?.borderColor = NSColor.clear.cgColor
-        selectionBorder.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(selectionBorder)
+        selectionView.wantsLayer = true
+        selectionView.layer?.borderWidth = 3
+        selectionView.layer?.cornerRadius = 8
+        selectionView.layer?.borderColor = NSColor.clear.cgColor
+        selectionView.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(selectionView)
 
         // Thumbnail image
         imageView.imageScaling = .scaleProportionallyUpOrDown
@@ -99,13 +116,12 @@ final class ThumbnailView: NSView {
         appLabel.translatesAutoresizingMaskIntoConstraints = false
         addSubview(appLabel)
 
-        // Constraints
         NSLayoutConstraint.activate([
             // Selection border fills entire view
-            selectionBorder.topAnchor.constraint(equalTo: topAnchor),
-            selectionBorder.bottomAnchor.constraint(equalTo: bottomAnchor),
-            selectionBorder.leadingAnchor.constraint(equalTo: leadingAnchor),
-            selectionBorder.trailingAnchor.constraint(equalTo: trailingAnchor),
+            selectionView.topAnchor.constraint(equalTo: topAnchor),
+            selectionView.bottomAnchor.constraint(equalTo: bottomAnchor),
+            selectionView.leadingAnchor.constraint(equalTo: leadingAnchor),
+            selectionView.trailingAnchor.constraint(equalTo: trailingAnchor),
 
             // Image at top
             imageView.topAnchor.constraint(equalTo: topAnchor, constant: 8),
@@ -129,18 +145,80 @@ final class ThumbnailView: NSView {
         ])
     }
 
+    // MARK: - Setup: Icons style
+
+    private func setupIconViews() {
+        wantsLayer = true
+        let width = style.itemWidth
+        let height = style.itemHeight
+        let icon = style.iconSize
+        // The highlight is a rounded square a little larger than the icon,
+        // like the native switcher's; the title row sits beneath it.
+        let highlightSize = icon + 16
+
+        selectionView.wantsLayer = true
+        selectionView.layer?.cornerRadius = 18
+        selectionView.layer?.backgroundColor = NSColor.clear.cgColor
+        selectionView.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(selectionView)
+
+        imageView.imageScaling = .scaleProportionallyUpOrDown
+        imageView.imageAlignment = .alignCenter
+        imageView.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(imageView)
+
+        // One title line, revealed only while selected (see updateAppearance).
+        titleLabel.font = NSFont.systemFont(ofSize: 12, weight: .medium)
+        titleLabel.textColor = .labelColor
+        titleLabel.alignment = .center
+        titleLabel.lineBreakMode = .byTruncatingTail
+        titleLabel.maximumNumberOfLines = 1
+        titleLabel.isHidden = true
+        titleLabel.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(titleLabel)
+
+        NSLayoutConstraint.activate([
+            selectionView.topAnchor.constraint(equalTo: topAnchor, constant: 4),
+            selectionView.centerXAnchor.constraint(equalTo: centerXAnchor),
+            selectionView.widthAnchor.constraint(equalToConstant: highlightSize),
+            selectionView.heightAnchor.constraint(equalToConstant: highlightSize),
+
+            imageView.centerXAnchor.constraint(equalTo: selectionView.centerXAnchor),
+            imageView.centerYAnchor.constraint(equalTo: selectionView.centerYAnchor),
+            imageView.widthAnchor.constraint(equalToConstant: icon),
+            imageView.heightAnchor.constraint(equalToConstant: icon),
+
+            titleLabel.topAnchor.constraint(equalTo: selectionView.bottomAnchor, constant: 6),
+            titleLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 2),
+            titleLabel.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -2),
+
+            widthAnchor.constraint(equalToConstant: width),
+            heightAnchor.constraint(equalToConstant: height),
+        ])
+    }
+
+    // MARK: - Content
+
     private func configure(with windowInfo: WindowInfo) {
         titleLabel.stringValue = windowInfo.windowTitle.isEmpty ? windowInfo.ownerName : windowInfo.windowTitle
         appLabel.stringValue = windowInfo.ownerName
 
-        if let thumbnail = windowInfo.thumbnail {
-            imageView.image = thumbnail
-        } else {
-            // Fallback: app icon
-            let icon = windowInfo.appIcon
-            imageView.image = icon
-            if windowInfo.isMinimized {
-                imageView.alphaValue = 0.7
+        switch style {
+        case .icons:
+            imageView.image = windowInfo.appIcon
+            if isMinimized {
+                imageView.alphaValue = 0.55
+            }
+
+        case .thumbnails:
+            if let thumbnail = windowInfo.thumbnail {
+                imageView.image = thumbnail
+            } else {
+                // Fallback: app icon
+                imageView.image = windowInfo.appIcon
+                if isMinimized {
+                    imageView.alphaValue = 0.7
+                }
             }
         }
 
@@ -162,19 +240,44 @@ final class ThumbnailView: NSView {
     }
 
     /// Replaces the app-icon placeholder with a captured window preview.
+    /// Icons style has no preview area and ignores it (captures are never
+    /// started for it anyway — SwitcherStyle.showsPreviews).
     func setThumbnail(_ image: NSImage) {
+        guard style == .thumbnails else { return }
         imageView.image = image
         imageView.alphaValue = 1.0
     }
 
+    // MARK: - Selection / hover
+
     private func updateAppearance() {
         effectiveAppearance.performAsCurrentDrawingAppearance {
-            if isSelected {
-                selectionBorder.layer?.borderColor = NSColor.controlAccentColor.cgColor
-                layer?.backgroundColor = NSColor.labelColor.withAlphaComponent(0.08).cgColor
-            } else {
-                selectionBorder.layer?.borderColor = NSColor.clear.cgColor
-                layer?.backgroundColor = NSColor.clear.cgColor
+            switch style {
+            case .thumbnails:
+                if isSelected {
+                    selectionView.layer?.borderColor = NSColor.controlAccentColor.cgColor
+                    layer?.backgroundColor = NSColor.labelColor.withAlphaComponent(0.08).cgColor
+                } else {
+                    selectionView.layer?.borderColor = NSColor.clear.cgColor
+                    layer?.backgroundColor = NSColor.clear.cgColor
+                }
+
+            case .icons:
+                selectionView.layer?.backgroundColor = isSelected
+                    ? NSColor.labelColor.withAlphaComponent(0.16).cgColor
+                    : NSColor.clear.cgColor
+                titleLabel.isHidden = !isSelected
+            }
+        }
+    }
+
+    private func setHover(_ hovering: Bool) {
+        guard !isSelected else { return }
+        effectiveAppearance.performAsCurrentDrawingAppearance {
+            let color = hovering ? NSColor.labelColor.withAlphaComponent(0.06).cgColor : NSColor.clear.cgColor
+            switch style {
+            case .thumbnails: layer?.backgroundColor = color
+            case .icons: selectionView.layer?.backgroundColor = color
             }
         }
     }
@@ -197,16 +300,10 @@ final class ThumbnailView: NSView {
     }
 
     override func mouseEntered(with event: NSEvent) {
-        if !isSelected {
-            effectiveAppearance.performAsCurrentDrawingAppearance {
-                layer?.backgroundColor = NSColor.labelColor.withAlphaComponent(0.05).cgColor
-            }
-        }
+        setHover(true)
     }
 
     override func mouseExited(with event: NSEvent) {
-        if !isSelected {
-            layer?.backgroundColor = NSColor.clear.cgColor
-        }
+        setHover(false)
     }
 }

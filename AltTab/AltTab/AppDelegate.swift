@@ -37,7 +37,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, HotkeyDelegate {
     /// Focus anchor captured once per session. reconcile() must re-anchor
     /// against the same reference point the session opened with — re-probing
     /// would expose the selection to focus drift (a sheet appearing, background
-    /// churn) while the switcher is up.
+    /// churn) while the switcher is up. Raw focused window ID; with Group by
+    /// Application on, anchorID() maps it onto its app's representative.
     private var sessionFocusedID: CGWindowID?
     private var switcherActive: Bool = false
     /// Incremented on every activation; async completions (refresh, previews)
@@ -127,7 +128,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, HotkeyDelegate {
         switchSession += 1
         let session = switchSession
 
-        currentWindows = windowModel.windowsFromCache()
+        let cached = windowModel.windowsFromCache()
+        currentWindows = Self.presented(cached)
         guard !currentWindows.isEmpty else {
             // Nothing to show — end the tap session so Tab isn't swallowed
             // dead, and kick a gather so an immediate retry can succeed (a
@@ -144,7 +146,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, HotkeyDelegate {
         // slot-1 anchor would jump one slot too far.
         sessionFocusedID = windowModel.frontmostWindowID()
         selection.activate(windowIDs: currentWindows.map { $0.windowID },
-                           focusedWindowID: sessionFocusedID,
+                           focusedWindowID: Self.anchorID(focused: sessionFocusedID, full: cached, presented: currentWindows),
                            reverse: reverse)
         switcherActive = true
         switcherPanel.show(windows: currentWindows, selectedIndex: selection.selectedIndex)
@@ -209,12 +211,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, HotkeyDelegate {
             dismissSwitcher()
             return
         }
+        let anchor = Self.anchorID(focused: sessionFocusedID, full: currentWindows, presented: remaining)
         currentWindows = remaining
         // After a cycle the selection follows its window ID; that ID is gone,
         // so reconcile lands on the same slot — now the next window. Before a
         // cycle it re-anchors against the (possibly quit) focused window.
         selection.reconcile(windowIDs: remaining.map { $0.windowID },
-                            focusedWindowID: sessionFocusedID)
+                            focusedWindowID: anchor)
         switcherPanel.show(windows: remaining, selectedIndex: selection.selectedIndex)
     }
 
@@ -252,7 +255,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, HotkeyDelegate {
 
         let thumbnails = Dictionary(currentWindows.compactMap { window in window.thumbnail.map { (window.windowID, $0) } },
                                     uniquingKeysWith: { first, _ in first })
-        var updated = fresh
+        var updated = Self.presented(fresh)
         for index in updated.indices {
             updated[index].thumbnail = thumbnails[updated[index].windowID]
         }
@@ -261,7 +264,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, HotkeyDelegate {
         let oldIndex = selection.selectedIndex
         currentWindows = updated
         selection.reconcile(windowIDs: updated.map { $0.windowID },
-                            focusedWindowID: sessionFocusedID)
+                            focusedWindowID: Self.anchorID(focused: sessionFocusedID, full: fresh, presented: updated))
 
         if idsChanged {
             switcherPanel.show(windows: updated, selectedIndex: selection.selectedIndex)
@@ -271,6 +274,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, HotkeyDelegate {
     }
 
     private func startPreviewCapture(session: Int) {
+        // Icons style has no preview area: never capture (and never touch
+        // Screen Recording) for it.
+        guard PreferencesMenu.currentStyle.showsPreviews else { return }
         windowCapture.capturePreviews(for: currentWindows) { [weak self] windowID, image in
             guard let self = self, self.switcherActive, self.switchSession == session else { return }
             if let index = self.currentWindows.firstIndex(where: { $0.windowID == windowID }) {
@@ -284,5 +290,21 @@ class AppDelegate: NSObject, NSApplicationDelegate, HotkeyDelegate {
         switcherActive = false
         windowCapture.cancel()
         switcherPanel.dismiss()
+    }
+
+    // MARK: - Presentation policy
+
+    /// Applies "Group by Application" to an MRU-sorted list: one entry per
+    /// app, its most recent window. Identity when the toggle is off.
+    private static func presented(_ windows: [WindowInfo]) -> [WindowInfo] {
+        guard PreferencesMenu.groupByApplication else { return windows }
+        return AppGrouping.collapse(windows) { $0.ownerPID }
+    }
+
+    /// The selection anchor for a presented list: the focused window itself
+    /// when it is listed, otherwise (grouped mode) its app's representative.
+    private static func anchorID(focused: CGWindowID?, full: [WindowInfo], presented: [WindowInfo]) -> CGWindowID? {
+        AppGrouping.representative(of: focused, in: presented, full: full,
+                                   id: { $0.windowID }, ownerPID: { $0.ownerPID })
     }
 }

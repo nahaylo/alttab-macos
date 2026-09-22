@@ -62,6 +62,8 @@ If you want extensive customization, use lwouis/alttab. If you want something sm
 
 - **Option-Tab** to activate, cycle with Tab, confirm on release
 - **Switcher Key** setting: Option (default) or **Command** — Command takes over the system Cmd-Tab app switcher while AltTab runs, no system settings changes needed; while the switcher is open, **Q** quits and **H** hides the selected window's app (native Cmd-Tab convention, works in both modes)
+- **Group by Application**: one entry per app (its most recent window), ordered by latest use — exactly the system switcher's list, but MRU-accurate. Move between an app's windows with its own Cmd-`
+- **Style**: **Thumbnails** (default — preview or icon, title, app name) or **Icons** — the native look: large app icons, a filled highlight behind the selection, one title line under the selected item only. Icons style never captures previews, so it never asks for Screen Recording
 - **Shift-Tab** / Arrow keys to navigate in reverse — and **Option-Shift-Tab** opens the switcher already cycling backward, anchored on the least-recently-used window (new in 1.3.2)
 - **Escape** to cancel without switching
 - **Instant response** — the window list is kept warm by a debounced background refresh between invocations, window-raise runs off the main thread, and app icons are cached, so the switcher appears immediately with fresh contents even after hours of idle (1.3.2)
@@ -69,13 +71,13 @@ If you want extensive customization, use lwouis/alttab. If you want something sm
 - App icon display with graceful fallback (no Screen Recording prompt on macOS 15+)
 - Includes minimized windows, ⌘H-hidden apps, and windows on other Spaces
 - Optional live window previews (ScreenCaptureKit, macOS 14+, opt-in from the menu)
-- Appearance override (System / Light / Dark) and background styles: Solid (default), Transparent, or native Liquid Glass (macOS 26+) with a **Glass Strength** setting — Light / Medium / High / Max
+- Appearance override (System / Light / Dark) and background styles: Solid (default), Transparent, native Liquid Glass (macOS 26+) with a **Glass Strength** setting — Light / Medium / High / Max — or **System**, which draws whatever the Dock's own switcher uses on your OS (Liquid Glass on 26+, the HUD material before). Switcher Key Command + Group by Application + Icons + System background is a faithful replacement for the built-in Cmd-Tab
 - Multi-monitor aware — the switcher opens on the screen with the mouse pointer
 - MRU (most recently used) ordering with intra-app focus tracking — resilient to busy apps: a wedged app's Accessibility timeout can't drop its windows from the list or scramble their order (1.3.2)
 - Menu bar utility — no Dock icon, no clutter
 - Launch at Login support (macOS 13+ SMAppService)
 - Zero dependencies — pure Swift + AppKit
-- ~2,800 lines of code, single-purpose, auditable (97 unit tests on the pure-logic core)
+- ~3,000 lines of code, single-purpose, auditable (106 unit tests on the pure-logic core)
 
 ## Build from source
 
@@ -197,11 +199,12 @@ AltTab/AltTab/
 ├── GatherMerge.swift           # Pure carry-over policy for lossy AX gathers (unit-tested)
 ├── Debouncer.swift             # Trailing-edge debouncer for the background cache refresh (unit-tested)
 ├── WindowCapture.swift         # Opt-in ScreenCaptureKit window previews (macOS 14+)
-├── SwitcherPanel.swift         # NSPanel overlay with selectable background (solid / HUD / Liquid Glass)
+├── SwitcherPresentation.swift  # Pure Style (Thumbnails / Icons) metrics + Group-by-Application collapse (unit-tested)
+├── SwitcherPanel.swift         # NSPanel overlay with selectable background (solid / HUD / Liquid Glass / System)
 ├── ThumbnailView.swift         # Individual window cell (preview/icon + title + app name)
 ├── WindowActivator.swift       # AXUIElement window raise / unminimize (off-main, bounded timeout)
 ├── PermissionManager.swift     # Accessibility polling; Screen Recording preflight/request
-└── PreferencesMenu.swift       # Status bar menu (Launch at Login, Appearance, Background, Window Previews, Quit)
+└── PreferencesMenu.swift       # Status bar menu (Launch at Login, Switcher Key, Group by Application, Style, Appearance, Background, Glass Strength, Window Previews, Quit)
 ```
 
 ## Uninstall

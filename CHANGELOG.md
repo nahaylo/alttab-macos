@@ -11,6 +11,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Switcher Key** (status menu): Option (default) or **Command**. Command makes Cmd-Tab open AltTab's window switcher in place of the system app switcher — the session-level event tap swallows the Cmd-Tab keyDown before the Dock sees it, so no Keyboard Shortcuts changes are needed. Applies to the next keypress, no relaunch. The choice lives in the pure `SwitcherModifier` type (unit-tested).
 - **Q / H while the switcher is open** quit or hide the selected window's app and keep the switcher up (native Cmd-Tab convention; both modifier modes). A quit app's windows leave the list immediately.
+- **Group by Application** (status menu, off by default): the list collapses to one entry per app — its most recently used window — so it reads as apps ordered by latest use, like the system switcher. Confirming activates that window; Q/H act on the app. The first-Tab anchor maps the focused window onto its app's entry, so a stale cache can't make the first Tab re-select the current app. Pure `AppGrouping` (unit-tested).
+- **Style** (status menu): **Thumbnails** (default, the existing cell) or **Icons** — the native Cmd-Tab look: 96pt app icons in a tight row, a filled rounded highlight behind the selection instead of a border, and a single title line shown under the selected item only. Icons style never starts a preview capture, so it never touches Screen Recording; "Show Window Previews" is greyed out under it. Cell geometry lives in the pure `SwitcherStyle` type (unit-tested).
+- **Background → System**: draws what the Dock's own app switcher uses on the running OS — regular Liquid Glass on macOS 26+, the translucent HUD material before. Glass Strength is greyed out under it (the system look fixes the strength); an explicit Liquid Glass choice keeps honoring it.
 
 ### Changed
 

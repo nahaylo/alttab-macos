@@ -7,9 +7,11 @@
 //  above all windows without stealing focus — critical for the Option-release
 //  activation flow. The background is user-selectable (status menu →
 //  Background): an opaque solid plate (default, WCAG AA-tested label
-//  contrast), the classic translucent HUD material, or native Liquid Glass
-//  on macOS 26+. Content lives in an NSScrollView wrapping a horizontal
-//  NSStackView of ThumbnailView cells. Appears centered on the screen that
+//  contrast), the classic translucent HUD material, native Liquid Glass on
+//  macOS 26+, or "System" — whatever the Dock's own app switcher draws on
+//  the running OS (regular Liquid Glass on 26+, the HUD material before).
+//  Content lives in an NSScrollView wrapping a horizontal NSStackView of
+//  ThumbnailView cells, sized per the Style preference (SwitcherStyle). Appears centered on the screen that
 //  contains the mouse pointer. Thumbnail clicks are reported through the
 //  onWindowClicked callback; previews arriving later are patched into cells
 //  in place via updateThumbnail(windowID:image:).
@@ -31,7 +33,7 @@ final class SwitcherPanel: NSPanel {
     static let appearanceDefaultsKey = "AppearanceOverride"
 
     /// UserDefaults key for the panel background style: absent/"solid",
-    /// "transparent", or "glass".
+    /// "transparent", "glass", or "system".
     static let backgroundDefaultsKey = "BackgroundStyle"
 
     /// UserDefaults key for the Liquid Glass strength: absent/"high" (the
@@ -43,31 +45,40 @@ final class SwitcherPanel: NSPanel {
     }
 
     private enum BackgroundStyle: String {
-        case solid, transparent, glass
+        case solid, transparent, glass, system
 
-        /// Resolves the stored preference: unknown values map to solid, and
-        /// "glass" falls back to solid on macOS < 26 where NSGlassEffectView
-        /// does not exist.
-        static func current() -> BackgroundStyle {
+        /// Resolves the stored preference to a drawable style plus the glass
+        /// strength to draw it with. Unknown values map to solid; "glass"
+        /// falls back to solid on macOS < 26 where NSGlassEffectView does not
+        /// exist; "system" is what the Dock's own switcher draws on this OS —
+        /// regular Liquid Glass (the default strength, no plate) on 26+, the
+        /// translucent HUD material before — so it never returns .system.
+        static func resolved() -> (style: BackgroundStyle, strength: GlassStrength) {
             let raw = UserDefaults.standard.string(forKey: SwitcherPanel.backgroundDefaultsKey) ?? "solid"
-            let style = BackgroundStyle(rawValue: raw) ?? .solid
-            if style == .glass {
-                guard #available(macOS 26.0, *) else { return .solid }
+            let stored = BackgroundStyle(rawValue: raw) ?? .solid
+            switch stored {
+            case .system:
+                if #available(macOS 26.0, *) { return (.glass, GlassStrength.defaultLevel) }
+                return (.transparent, GlassStrength.defaultLevel)
+            case .glass:
+                guard #available(macOS 26.0, *) else { return (.solid, SwitcherPanel.currentGlassStrength()) }
+                return (.glass, SwitcherPanel.currentGlassStrength())
+            case .solid, .transparent:
+                return (stored, SwitcherPanel.currentGlassStrength())
             }
-            return style
         }
     }
 
     private var installedStyle: BackgroundStyle?
     private var installedGlassStrength: GlassStrength?
 
-    private let itemWidth: CGFloat = 180
-    private let itemHeight: CGFloat = 160
-    private let itemSpacing: CGFloat = 12
+    /// Cell geometry comes from the Style preference, re-read on every show().
+    private var style: SwitcherStyle = SwitcherStyle.defaultStyle
     private let panelPadding: CGFloat = 20
 
     private var scrollView: NSScrollView!
     private var stackView: NSStackView!
+    private var stackHeightConstraint: NSLayoutConstraint!
     private var thumbnailViews: [ThumbnailView] = []
     private var windowIDs: [CGWindowID] = []
     private var selectedIndex: Int = 0
@@ -106,18 +117,20 @@ final class SwitcherPanel: NSPanel {
 
         stackView = NSStackView()
         stackView.orientation = .horizontal
-        stackView.spacing = itemSpacing
+        stackView.spacing = style.itemSpacing
         stackView.translatesAutoresizingMaskIntoConstraints = false
 
         scrollView.documentView = stackView
+        stackHeightConstraint = stackView.heightAnchor.constraint(equalToConstant: style.itemHeight)
         NSLayoutConstraint.activate([
             stackView.topAnchor.constraint(equalTo: scrollView.contentView.topAnchor),
             stackView.bottomAnchor.constraint(equalTo: scrollView.contentView.bottomAnchor),
             stackView.leadingAnchor.constraint(equalTo: scrollView.contentView.leadingAnchor),
-            stackView.heightAnchor.constraint(equalToConstant: itemHeight),
+            stackHeightConstraint,
         ])
 
-        installBackground(BackgroundStyle.current(), glassStrength: Self.currentGlassStrength())
+        let background = BackgroundStyle.resolved()
+        installBackground(background.style, glassStrength: background.strength)
     }
 
     /// The opaque, appearance-adaptive plate whose label contrast the
@@ -165,8 +178,7 @@ final class SwitcherPanel: NSPanel {
 
     /// Re-installs the background root only when a preference changed.
     private func installBackgroundIfNeeded() {
-        let style = BackgroundStyle.current()
-        let strength = Self.currentGlassStrength()
+        let (style, strength) = BackgroundStyle.resolved()
         if style != installedStyle || (style == .glass && strength != installedGlassStrength) {
             installBackground(style, glassStrength: strength)
         }
@@ -181,7 +193,9 @@ final class SwitcherPanel: NSPanel {
         let scrollHost: NSView
 
         switch style {
-        case .solid:
+        case .solid, .system:
+            // .system is unreachable: resolved() always maps it to a drawable
+            // style. Kept for exhaustiveness.
             let box = Self.makeSolidBackground()
             root = box
             scrollHost = box
@@ -252,6 +266,7 @@ final class SwitcherPanel: NSPanel {
     func show(windows: [WindowInfo], selectedIndex: Int) {
         applyAppearancePreference()
         installBackgroundIfNeeded()
+        applyStylePreference()
         self.selectedIndex = selectedIndex
 
         // Clear old
@@ -261,7 +276,7 @@ final class SwitcherPanel: NSPanel {
 
         // Build new
         for (index, windowInfo) in windows.enumerated() {
-            let view = ThumbnailView(windowInfo: windowInfo, width: itemWidth, height: itemHeight)
+            let view = ThumbnailView(windowInfo: windowInfo, style: style)
             view.onClicked = { [weak self] in
                 self?.handleClick(index: index)
             }
@@ -278,9 +293,10 @@ final class SwitcherPanel: NSPanel {
         guard let screen = NSScreen.screens.first(where: { NSMouseInRect(mouseLocation, $0.frame, false) })
                 ?? NSScreen.main ?? NSScreen.screens.first else { return }
         let maxPanelWidth = screen.frame.width * 0.85
-        let contentWidth = CGFloat(windows.count) * itemWidth + CGFloat(max(0, windows.count - 1)) * itemSpacing
+        let contentWidth = CGFloat(windows.count) * style.itemWidth
+            + CGFloat(max(0, windows.count - 1)) * style.itemSpacing
         let panelWidth = min(maxPanelWidth, contentWidth + panelPadding * 2)
-        let panelHeight = itemHeight + panelPadding * 2
+        let panelHeight = style.itemHeight + panelPadding * 2
 
         let panelX = screen.frame.midX - panelWidth / 2
         let panelY = screen.frame.midY - panelHeight / 2
@@ -316,6 +332,13 @@ final class SwitcherPanel: NSPanel {
     }
 
     // MARK: - Private
+
+    /// Re-reads the Style preference and resizes the strip for its cells.
+    private func applyStylePreference() {
+        style = SwitcherStyle.resolve(UserDefaults.standard.string(forKey: SwitcherStyle.defaultsKey))
+        stackView.spacing = style.itemSpacing
+        stackHeightConstraint.constant = style.itemHeight
+    }
 
     /// Applies the user's appearance preference; nil follows the OS theme.
     private func applyAppearancePreference() {
