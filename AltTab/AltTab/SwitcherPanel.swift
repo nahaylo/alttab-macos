@@ -142,7 +142,7 @@ final class SwitcherPanel: NSPanel {
             stackHeightConstraint,
         ])
 
-        captionLabel.font = NSFont.systemFont(ofSize: 13, weight: .medium)
+        captionLabel.font = NSFont.systemFont(ofSize: 13, weight: .regular)
         captionLabel.textColor = .labelColor
         captionLabel.alignment = .center
         captionLabel.lineBreakMode = .byTruncatingMiddle

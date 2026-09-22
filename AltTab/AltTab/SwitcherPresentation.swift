@@ -72,8 +72,8 @@ enum SwitcherStyle: String, CaseIterable {
     /// and the panel top sits 0.3 icon above the icon.
     static let highlightScale: CGFloat = 1.2
     static let gapScale: CGFloat = 0.15
-    static let sidePaddingScale: CGFloat = 0.22
-    static let topPaddingScale: CGFloat = 0.3
+    static let sidePaddingScale: CGFloat = 0.26
+    static let topPaddingScale: CGFloat = 0.33
 
     /// Fraction of the screen width the panel may occupy. The native switcher
     /// runs nearly edge to edge, which is how it keeps icons large with many
@@ -138,7 +138,7 @@ enum SwitcherStyle: String, CaseIterable {
     var captionRowHeight: CGFloat {
         switch self {
         case .thumbnails: return 0
-        case .icons: return 18
+        case .icons: return 14
         }
     }
 
