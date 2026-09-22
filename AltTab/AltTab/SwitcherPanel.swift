@@ -51,26 +51,29 @@ final class SwitcherPanel: NSPanel {
         /// strength to draw it with. Unknown values map to solid; "glass"
         /// falls back to solid on macOS < 26 where NSGlassEffectView does not
         /// exist; "system" is what the Dock's own switcher draws on this OS —
-        /// regular Liquid Glass (the default strength, no plate) on 26+, the
-        /// translucent HUD material before — so it never returns .system.
-        static func resolved() -> (style: BackgroundStyle, strength: GlassStrength) {
+        /// Liquid Glass at the OS default (`followsSystem`: the view's style
+        /// and tint are left untouched, so Appearance/Accessibility settings
+        /// and any future default apply as-is) on 26+, the translucent HUD
+        /// material before — so it never returns .system.
+        static func resolved() -> (style: BackgroundStyle, strength: GlassStrength, followsSystem: Bool) {
             let raw = UserDefaults.standard.string(forKey: SwitcherPanel.backgroundDefaultsKey) ?? "solid"
             let stored = BackgroundStyle(rawValue: raw) ?? .solid
             switch stored {
             case .system:
-                if #available(macOS 26.0, *) { return (.glass, GlassStrength.defaultLevel) }
-                return (.transparent, GlassStrength.defaultLevel)
+                if #available(macOS 26.0, *) { return (.glass, GlassStrength.defaultLevel, true) }
+                return (.transparent, GlassStrength.defaultLevel, true)
             case .glass:
-                guard #available(macOS 26.0, *) else { return (.solid, SwitcherPanel.currentGlassStrength()) }
-                return (.glass, SwitcherPanel.currentGlassStrength())
+                guard #available(macOS 26.0, *) else { return (.solid, SwitcherPanel.currentGlassStrength(), false) }
+                return (.glass, SwitcherPanel.currentGlassStrength(), false)
             case .solid, .transparent:
-                return (stored, SwitcherPanel.currentGlassStrength())
+                return (stored, SwitcherPanel.currentGlassStrength(), false)
             }
         }
     }
 
     private var installedStyle: BackgroundStyle?
     private var installedGlassStrength: GlassStrength?
+    private var installedFollowsSystem: Bool?
     private var installedCornerRadius: CGFloat?
 
     /// Cell geometry comes from the Style preference, re-read on every show();
@@ -151,7 +154,7 @@ final class SwitcherPanel: NSPanel {
 
         let background = BackgroundStyle.resolved()
         installBackground(background.style, glassStrength: background.strength,
-                          cornerRadius: metrics.panelCornerRadius)
+                          followsSystem: background.followsSystem, cornerRadius: metrics.panelCornerRadius)
     }
 
     /// The opaque, appearance-adaptive plate whose label contrast the
@@ -199,17 +202,18 @@ final class SwitcherPanel: NSPanel {
 
     /// Re-installs the background root only when a preference changed.
     private func installBackgroundIfNeeded() {
-        let (style, strength) = BackgroundStyle.resolved()
+        let (style, strength, followsSystem) = BackgroundStyle.resolved()
         let radius = metrics.panelCornerRadius
         if style != installedStyle || (style == .glass && strength != installedGlassStrength)
-            || radius != installedCornerRadius {
-            installBackground(style, glassStrength: strength, cornerRadius: radius)
+            || followsSystem != installedFollowsSystem || radius != installedCornerRadius {
+            installBackground(style, glassStrength: strength, followsSystem: followsSystem, cornerRadius: radius)
         }
     }
 
     /// Builds the root view for the style and re-parents the persistent
     /// scroll view into it with the standard panel padding.
-    private func installBackground(_ style: BackgroundStyle, glassStrength: GlassStrength, cornerRadius: CGFloat) {
+    private func installBackground(_ style: BackgroundStyle, glassStrength: GlassStrength,
+                                   followsSystem: Bool, cornerRadius: CGFloat) {
         scrollView.removeFromSuperview()
         captionLabel.removeFromSuperview()
 
@@ -253,7 +257,12 @@ final class SwitcherPanel: NSPanel {
                 // host's translucent plate for Light / Medium (see GlassStrength).
                 let glass = NSGlassEffectView()
                 glass.cornerRadius = cornerRadius
-                glass.style = glassStrength.usesClearStyle ? .clear : .regular
+                // Background: System leaves the style at the OS default so the
+                // user's Appearance / Accessibility glass settings, and any
+                // future default, apply unmodified.
+                if !followsSystem {
+                    glass.style = glassStrength.usesClearStyle ? .clear : .regular
+                }
                 let host = Self.makeGlassHost(plateAlpha: glassStrength.plateAlpha, cornerRadius: cornerRadius)
                 glass.contentView = host
                 NSLayoutConstraint.activate([
@@ -288,6 +297,7 @@ final class SwitcherPanel: NSPanel {
         applyScrollInsets()
         installedStyle = style
         installedGlassStrength = glassStrength
+        installedFollowsSystem = followsSystem
         installedCornerRadius = cornerRadius
     }
 
