@@ -331,7 +331,11 @@ final class SwitcherPanel: NSPanel {
         windowIDs = windows.map { $0.windowID }
         let grouped = UserDefaults.standard.bool(forKey: AppGrouping.defaultsKey)
         captions = windows.map {
-            SwitcherStyle.caption(windowTitle: $0.windowTitle, appName: $0.ownerName, grouped: grouped)
+            // ownerName is the window server's process name ("Code"); the
+            // native switcher shows the app's localized display name
+            // ("Visual Studio Code"). Cheap main-thread lookup, no IPC.
+            let appName = NSRunningApplication(processIdentifier: $0.ownerPID)?.localizedName ?? $0.ownerName
+            return SwitcherStyle.caption(windowTitle: $0.windowTitle, appName: appName, grouped: grouped)
         }
 
         // Build new
