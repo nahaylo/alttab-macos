@@ -79,6 +79,13 @@ final class SwitcherPanel: NSPanel {
     private var scrollView: NSScrollView!
     private var stackView: NSStackView!
     private var stackHeightConstraint: NSLayoutConstraint!
+    /// Scroll view's bottom inset: panel padding plus the caption row.
+    private var scrollBottomConstraint: NSLayoutConstraint?
+    /// Icons style: the selected item's caption, floating under its icon at
+    /// panel level (frame-positioned, clamped to the panel) so a long name
+    /// is never truncated to the 120pt cell like the native switcher.
+    private let captionLabel = NSTextField(labelWithString: "")
+    private var captions: [String] = []
     private var thumbnailViews: [ThumbnailView] = []
     private var windowIDs: [CGWindowID] = []
     private var selectedIndex: Int = 0
@@ -128,6 +135,13 @@ final class SwitcherPanel: NSPanel {
             stackView.leadingAnchor.constraint(equalTo: scrollView.contentView.leadingAnchor),
             stackHeightConstraint,
         ])
+
+        captionLabel.font = NSFont.systemFont(ofSize: 13, weight: .medium)
+        captionLabel.textColor = .labelColor
+        captionLabel.alignment = .center
+        captionLabel.lineBreakMode = .byTruncatingMiddle
+        captionLabel.maximumNumberOfLines = 1
+        captionLabel.isHidden = true
 
         let background = BackgroundStyle.resolved()
         installBackground(background.style, glassStrength: background.strength)
@@ -188,6 +202,7 @@ final class SwitcherPanel: NSPanel {
     /// scroll view into it with the standard panel padding.
     private func installBackground(_ style: BackgroundStyle, glassStrength: GlassStrength) {
         scrollView.removeFromSuperview()
+        captionLabel.removeFromSuperview()
 
         let root: NSView
         let scrollHost: NSView
@@ -251,9 +266,13 @@ final class SwitcherPanel: NSPanel {
 
         contentView = root
         scrollHost.addSubview(scrollView)
+        scrollHost.addSubview(captionLabel)
+        let bottom = scrollView.bottomAnchor.constraint(equalTo: scrollHost.bottomAnchor,
+                                                        constant: -(panelPadding + self.style.captionRowHeight))
+        scrollBottomConstraint = bottom
         NSLayoutConstraint.activate([
             scrollView.topAnchor.constraint(equalTo: scrollHost.topAnchor, constant: panelPadding),
-            scrollView.bottomAnchor.constraint(equalTo: scrollHost.bottomAnchor, constant: -panelPadding),
+            bottom,
             scrollView.leadingAnchor.constraint(equalTo: scrollHost.leadingAnchor, constant: panelPadding),
             scrollView.trailingAnchor.constraint(equalTo: scrollHost.trailingAnchor, constant: -panelPadding),
         ])
@@ -273,6 +292,10 @@ final class SwitcherPanel: NSPanel {
         thumbnailViews.forEach { $0.removeFromSuperview() }
         thumbnailViews.removeAll()
         windowIDs = windows.map { $0.windowID }
+        let grouped = UserDefaults.standard.bool(forKey: AppGrouping.defaultsKey)
+        captions = windows.map {
+            SwitcherStyle.caption(windowTitle: $0.windowTitle, appName: $0.ownerName, grouped: grouped)
+        }
 
         // Build new
         for (index, windowInfo) in windows.enumerated() {
@@ -296,7 +319,7 @@ final class SwitcherPanel: NSPanel {
         let contentWidth = CGFloat(windows.count) * style.itemWidth
             + CGFloat(max(0, windows.count - 1)) * style.itemSpacing
         let panelWidth = min(maxPanelWidth, contentWidth + panelPadding * 2)
-        let panelHeight = style.itemHeight + panelPadding * 2
+        let panelHeight = style.itemHeight + style.captionRowHeight + panelPadding * 2
 
         let panelX = screen.frame.midX - panelWidth / 2
         let panelY = screen.frame.midY - panelHeight / 2
@@ -305,6 +328,7 @@ final class SwitcherPanel: NSPanel {
 
         orderFrontRegardless()
         scrollToSelected()
+        positionCaption()
     }
 
     func updateSelection(index: Int) {
@@ -315,6 +339,7 @@ final class SwitcherPanel: NSPanel {
         selectedIndex = index
         thumbnailViews[selectedIndex].isSelected = true
         scrollToSelected()
+        positionCaption()
     }
 
     /// Patches a captured preview into its cell without rebuilding the panel.
@@ -329,6 +354,8 @@ final class SwitcherPanel: NSPanel {
         thumbnailViews.forEach { $0.removeFromSuperview() }
         thumbnailViews.removeAll()
         windowIDs.removeAll()
+        captions.removeAll()
+        captionLabel.isHidden = true
     }
 
     // MARK: - Private
@@ -338,6 +365,33 @@ final class SwitcherPanel: NSPanel {
         style = SwitcherStyle.resolve(UserDefaults.standard.string(forKey: SwitcherStyle.defaultsKey))
         stackView.spacing = style.itemSpacing
         stackHeightConstraint.constant = style.itemHeight
+        scrollBottomConstraint?.constant = -(panelPadding + style.captionRowHeight)
+    }
+
+    /// Icons style: lays the selected item's caption out in the caption row,
+    /// centered under its icon and clamped inside the panel padding. Sized to
+    /// the text, so it spans neighbouring cells rather than truncating; only
+    /// a name wider than the whole panel is (middle-)truncated.
+    private func positionCaption() {
+        guard style.captionRowHeight > 0, selectedIndex < thumbnailViews.count,
+              selectedIndex < captions.count, let host = captionLabel.superview else {
+            captionLabel.isHidden = true
+            return
+        }
+        captionLabel.stringValue = captions[selectedIndex]
+        captionLabel.isHidden = false
+        captionLabel.sizeToFit()
+        host.layoutSubtreeIfNeeded()
+
+        let cell = thumbnailViews[selectedIndex]
+        let cellInHost = cell.convert(cell.bounds, to: host)
+        let maxWidth = max(0, host.bounds.width - panelPadding * 2)
+        let size = NSSize(width: min(captionLabel.frame.width, maxWidth), height: captionLabel.frame.height)
+        let minX = panelPadding
+        let maxX = host.bounds.width - panelPadding - size.width
+        let x = min(max(cellInHost.midX - size.width / 2, minX), maxX)
+        let y = panelPadding + (style.captionRowHeight - size.height) / 2
+        captionLabel.frame = NSRect(x: x, y: y, width: size.width, height: size.height)
     }
 
     /// Applies the user's appearance preference; nil follows the OS theme.

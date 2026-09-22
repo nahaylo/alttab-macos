@@ -63,7 +63,7 @@ If you want extensive customization, use lwouis/alttab. If you want something sm
 - **Option-Tab** to activate, cycle with Tab, confirm on release
 - **Switcher Key** setting: Option (default) or **Command** — Command takes over the system Cmd-Tab app switcher while AltTab runs, no system settings changes needed; while the switcher is open, **Q** quits and **H** hides the selected window's app (native Cmd-Tab convention, works in both modes)
 - **Group by Application**: one entry per app (its most recent window), ordered by latest use — exactly the system switcher's list, but MRU-accurate. Move between an app's windows with its own Cmd-`
-- **Style**: **Thumbnails** (default — preview or icon, title, app name) or **Icons** — the native look: large app icons, a filled highlight behind the selection, one title line under the selected item only. Icons style never captures previews, so it never asks for Screen Recording
+- **Style**: **Thumbnails** (default — preview or icon, title, app name) or **Icons** — the native look: large app icons, a filled highlight behind the selection, and the selected item's name floating beneath it at full width, never truncated to the cell. Icons style never captures previews, so it never asks for Screen Recording
 - **Shift-Tab** / Arrow keys to navigate in reverse — and **Option-Shift-Tab** opens the switcher already cycling backward, anchored on the least-recently-used window (new in 1.3.2)
 - **Escape** to cancel without switching
 - **Instant response** — the window list is kept warm by a debounced background refresh between invocations, window-raise runs off the main thread, and app icons are cached, so the switcher appears immediately with fresh contents even after hours of idle (1.3.2)

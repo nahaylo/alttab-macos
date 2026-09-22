@@ -8,10 +8,10 @@
 //  - Thumbnails: the window preview (or app icon fallback), window title and
 //    application name; the selected cell gets an accent-colored border and a
 //    subtle background tint.
-//  - Icons: the native Cmd-Tab look — one large app icon, a filled rounded
-//    highlight behind the selected icon, and a single title line that is
-//    shown under the selected item only (so same-app windows stay
-//    distinguishable without cluttering the row). Minimized windows dim.
+//  - Icons: the native Cmd-Tab look — one large app icon with a filled
+//    rounded highlight behind the selected one. Minimized windows dim. The
+//    caption under the selected icon is drawn by SwitcherPanel, not the cell,
+//    so it can span the panel instead of truncating at the cell width.
 //
 //  Supports mouse hover and click interaction for direct window selection.
 //
@@ -153,7 +153,7 @@ final class ThumbnailView: NSView {
         let height = style.itemHeight
         let icon = style.iconSize
         // The highlight is a rounded square a little larger than the icon,
-        // like the native switcher's; the title row sits beneath it.
+        // like the native switcher's.
         let highlightSize = icon + 16
 
         selectionView.wantsLayer = true
@@ -167,19 +167,9 @@ final class ThumbnailView: NSView {
         imageView.translatesAutoresizingMaskIntoConstraints = false
         addSubview(imageView)
 
-        // One title line, revealed only while selected (see updateAppearance).
-        titleLabel.font = NSFont.systemFont(ofSize: 12, weight: .medium)
-        titleLabel.textColor = .labelColor
-        titleLabel.alignment = .center
-        titleLabel.lineBreakMode = .byTruncatingTail
-        titleLabel.maximumNumberOfLines = 1
-        titleLabel.isHidden = true
-        titleLabel.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(titleLabel)
-
         NSLayoutConstraint.activate([
-            selectionView.topAnchor.constraint(equalTo: topAnchor, constant: 4),
             selectionView.centerXAnchor.constraint(equalTo: centerXAnchor),
+            selectionView.centerYAnchor.constraint(equalTo: centerYAnchor),
             selectionView.widthAnchor.constraint(equalToConstant: highlightSize),
             selectionView.heightAnchor.constraint(equalToConstant: highlightSize),
 
@@ -187,10 +177,6 @@ final class ThumbnailView: NSView {
             imageView.centerYAnchor.constraint(equalTo: selectionView.centerYAnchor),
             imageView.widthAnchor.constraint(equalToConstant: icon),
             imageView.heightAnchor.constraint(equalToConstant: icon),
-
-            titleLabel.topAnchor.constraint(equalTo: selectionView.bottomAnchor, constant: 6),
-            titleLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 2),
-            titleLabel.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -2),
 
             widthAnchor.constraint(equalToConstant: width),
             heightAnchor.constraint(equalToConstant: height),
@@ -266,7 +252,6 @@ final class ThumbnailView: NSView {
                 selectionView.layer?.backgroundColor = isSelected
                     ? NSColor.labelColor.withAlphaComponent(0.16).cgColor
                     : NSColor.clear.cgColor
-                titleLabel.isHidden = !isSelected
             }
         }
     }

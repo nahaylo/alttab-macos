@@ -36,13 +36,23 @@ final class SwitcherPresentationTests: XCTestCase {
         XCTAssertFalse(SwitcherStyle.icons.showsPreviews)
     }
 
-    func testIconsStyleGeometryFitsTheIconWithRoomForATitle() {
+    func testIconsStyleGeometryFitsTheIconAndReservesACaptionRow() {
         let icons = SwitcherStyle.icons
         XCTAssertGreaterThan(icons.iconSize, 0)
         XCTAssertGreaterThan(icons.itemWidth, icons.iconSize)
-        XCTAssertGreaterThan(icons.itemHeight, icons.iconSize + 20, "no room for the title row")
+        XCTAssertGreaterThanOrEqual(icons.itemHeight, icons.iconSize + 16, "highlight must fit the cell")
+        XCTAssertGreaterThan(icons.captionRowHeight, 0, "caption row is where the selected name goes")
+        XCTAssertEqual(SwitcherStyle.thumbnails.captionRowHeight, 0, "thumbnails label inside the cell")
         XCTAssertEqual(SwitcherStyle.thumbnails.itemWidth, 180, "original cell width preserved")
         XCTAssertEqual(SwitcherStyle.thumbnails.itemHeight, 160, "original cell height preserved")
+    }
+
+    /// Grouped lists are apps → app name (like the system switcher);
+    /// ungrouped → window title, app name for untitled windows.
+    func testCaptionPolicy() {
+        XCTAssertEqual(SwitcherStyle.caption(windowTitle: "Inbox", appName: "Mail", grouped: true), "Mail")
+        XCTAssertEqual(SwitcherStyle.caption(windowTitle: "Inbox", appName: "Mail", grouped: false), "Inbox")
+        XCTAssertEqual(SwitcherStyle.caption(windowTitle: "", appName: "Mail", grouped: false), "Mail")
     }
 
     // MARK: - AppGrouping.collapse

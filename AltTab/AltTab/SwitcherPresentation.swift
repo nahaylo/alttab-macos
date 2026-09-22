@@ -6,7 +6,8 @@
 //  unit-testable without AppKit:
 //
 //  - SwitcherStyle: "Icons" (the native Cmd-Tab look — one large app icon per
-//    item, filled selection highlight, a single title under the selected item)
+//    item, filled selection highlight, and one caption that floats under the
+//    selected icon at panel level so it is never truncated to the cell width)
 //    or "Thumbnails" (the original cell with preview/icon + title + app name).
 //    Owns the cell metrics so the panel and cell agree on geometry.
 //  - AppGrouping: "Group by Application" collapses the MRU-sorted window list
@@ -62,8 +63,27 @@ enum SwitcherStyle: String, CaseIterable {
     var itemHeight: CGFloat {
         switch self {
         case .thumbnails: return 160
-        case .icons: return 140
+        case .icons: return 120
         }
+    }
+
+    /// Height of the caption row the panel reserves below the strip. Icons
+    /// style draws the selected item's caption there (full width, no cell
+    /// clipping — the native switcher does the same); Thumbnails puts its
+    /// labels inside the cell and needs none.
+    var captionRowHeight: CGFloat {
+        switch self {
+        case .thumbnails: return 0
+        case .icons: return 26
+        }
+    }
+
+    /// The caption for a selected Icons-style item. Grouped lists are apps,
+    /// so the app name (as the system switcher shows); otherwise the window
+    /// title, falling back to the app name for untitled windows.
+    static func caption(windowTitle: String, appName: String, grouped: Bool) -> String {
+        if grouped || windowTitle.isEmpty { return appName }
+        return windowTitle
     }
 
     var itemSpacing: CGFloat {
