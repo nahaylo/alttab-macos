@@ -44,6 +44,7 @@ final class ThumbnailView: NSView {
     }
 
     private let style: SwitcherStyle
+    private let metrics: CellMetrics
     private let imageView: NSImageView
     private let titleLabel: NSTextField
     private let appLabel: NSTextField
@@ -51,8 +52,9 @@ final class ThumbnailView: NSView {
     private let selectionView: NSView
     private let isMinimized: Bool
 
-    init(windowInfo: WindowInfo, style: SwitcherStyle) {
+    init(windowInfo: WindowInfo, style: SwitcherStyle, metrics: CellMetrics) {
         self.style = style
+        self.metrics = metrics
         self.isMinimized = windowInfo.isMinimized
 
         imageView = NSImageView()
@@ -60,7 +62,7 @@ final class ThumbnailView: NSView {
         appLabel = NSTextField(labelWithString: "")
         selectionView = NSView()
 
-        super.init(frame: NSRect(x: 0, y: 0, width: style.itemWidth, height: style.itemHeight))
+        super.init(frame: NSRect(x: 0, y: 0, width: metrics.itemWidth, height: metrics.itemHeight))
 
         switch style {
         case .thumbnails: setupThumbnailViews()
@@ -77,8 +79,8 @@ final class ThumbnailView: NSView {
 
     private func setupThumbnailViews() {
         wantsLayer = true
-        let width = style.itemWidth
-        let height = style.itemHeight
+        let width = metrics.itemWidth
+        let height = metrics.itemHeight
         let thumbnailHeight = height - 50 // Reserve space for labels
 
         // Selection border
@@ -149,15 +151,15 @@ final class ThumbnailView: NSView {
 
     private func setupIconViews() {
         wantsLayer = true
-        let width = style.itemWidth
-        let height = style.itemHeight
-        let icon = style.iconSize
+        let width = metrics.itemWidth
+        let height = metrics.itemHeight
+        let icon = metrics.iconSize
         // The highlight is a rounded square a little larger than the icon,
-        // like the native switcher's.
+        // like the native switcher's; its radius scales with the icon.
         let highlightSize = icon + 16
 
         selectionView.wantsLayer = true
-        selectionView.layer?.cornerRadius = 18
+        selectionView.layer?.cornerRadius = max(10, highlightSize * 0.16)
         selectionView.layer?.backgroundColor = NSColor.clear.cgColor
         selectionView.translatesAutoresizingMaskIntoConstraints = false
         addSubview(selectionView)

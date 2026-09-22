@@ -9,7 +9,10 @@
 //    item, filled selection highlight, and one caption that floats under the
 //    selected icon at panel level so it is never truncated to the cell width)
 //    or "Thumbnails" (the original cell with preview/icon + title + app name).
-//    Owns the cell metrics so the panel and cell agree on geometry.
+//    Owns the cell metrics so the panel and cell agree on geometry; Icons
+//    metrics adapt to the item count like the native switcher — icons shrink
+//    so the whole row fits the available width, down to a floor, and only
+//    past that does the strip scroll.
 //  - AppGrouping: "Group by Application" collapses the MRU-sorted window list
 //    to one representative window per app — the first (most recent) one — so
 //    the list reads as apps ordered by their latest use, exactly what the
@@ -52,18 +55,29 @@ enum SwitcherStyle: String, CaseIterable {
         self == .thumbnails
     }
 
-    /// Cell geometry, shared by the panel (strip sizing) and the cell view.
-    var itemWidth: CGFloat {
-        switch self {
-        case .thumbnails: return 180
-        case .icons: return 120
-        }
-    }
+    /// Largest icon edge for Icons style (what the native switcher draws for
+    /// a handful of apps) and the floor it shrinks to before scrolling.
+    static let maxIconSize: CGFloat = 96
+    static let minIconSize: CGFloat = 48
+    /// Padding around the icon inside its cell (8pt highlight inset + 4pt).
+    static let iconCellInset: CGFloat = 12
 
-    var itemHeight: CGFloat {
+    /// Cell geometry for `count` items in `availableWidth` points of strip.
+    /// Thumbnails cells are fixed. Icons cells size their icon so the whole
+    /// row fits, clamped to [minIconSize, maxIconSize]; a row that does not
+    /// fit even at the floor scrolls (the panel's existing behavior).
+    func metrics(count: Int, availableWidth: CGFloat) -> CellMetrics {
         switch self {
-        case .thumbnails: return 160
-        case .icons: return 120
+        case .thumbnails:
+            return CellMetrics(iconSize: 0, itemWidth: 180, itemHeight: 160, itemSpacing: 12)
+        case .icons:
+            let spacing: CGFloat = 8
+            let n = CGFloat(max(1, count))
+            // n * (icon + 2*inset) + (n - 1) * spacing <= availableWidth
+            let fitted = (availableWidth - (n - 1) * spacing) / n - 2 * Self.iconCellInset
+            let icon = min(Self.maxIconSize, max(Self.minIconSize, fitted.rounded(.down)))
+            let side = icon + 2 * Self.iconCellInset
+            return CellMetrics(iconSize: icon, itemWidth: side, itemHeight: side, itemSpacing: spacing)
         }
     }
 
@@ -86,19 +100,24 @@ enum SwitcherStyle: String, CaseIterable {
         return windowTitle
     }
 
-    var itemSpacing: CGFloat {
-        switch self {
-        case .thumbnails: return 12
-        case .icons: return 8
-        }
-    }
+}
 
-    /// Icon edge for Icons style (the native switcher draws roughly this size).
-    var iconSize: CGFloat {
-        switch self {
-        case .thumbnails: return 0
-        case .icons: return 96
-        }
+// MARK: - CellMetrics
+
+/// Geometry of one strip cell, shared by the panel (strip sizing) and the
+/// cell view so they cannot disagree.
+struct CellMetrics: Equatable {
+    /// Icon edge (Icons style); 0 for Thumbnails, whose image area is derived
+    /// from the cell height instead.
+    let iconSize: CGFloat
+    let itemWidth: CGFloat
+    let itemHeight: CGFloat
+    let itemSpacing: CGFloat
+
+    /// Total strip width for `count` cells.
+    func stripWidth(count: Int) -> CGFloat {
+        guard count > 0 else { return 0 }
+        return CGFloat(count) * itemWidth + CGFloat(count - 1) * itemSpacing
     }
 }
 

@@ -72,9 +72,13 @@ final class SwitcherPanel: NSPanel {
     private var installedStyle: BackgroundStyle?
     private var installedGlassStrength: GlassStrength?
 
-    /// Cell geometry comes from the Style preference, re-read on every show().
+    /// Cell geometry comes from the Style preference, re-read on every show();
+    /// Icons metrics also depend on the item count and the screen width.
     private var style: SwitcherStyle = SwitcherStyle.defaultStyle
+    private var metrics = SwitcherStyle.defaultStyle.metrics(count: 0, availableWidth: 0)
     private let panelPadding: CGFloat = 20
+    /// Fraction of the screen width the panel may occupy.
+    private let maxPanelWidthFraction: CGFloat = 0.85
 
     private var scrollView: NSScrollView!
     private var stackView: NSStackView!
@@ -124,11 +128,11 @@ final class SwitcherPanel: NSPanel {
 
         stackView = NSStackView()
         stackView.orientation = .horizontal
-        stackView.spacing = style.itemSpacing
+        stackView.spacing = metrics.itemSpacing
         stackView.translatesAutoresizingMaskIntoConstraints = false
 
         scrollView.documentView = stackView
-        stackHeightConstraint = stackView.heightAnchor.constraint(equalToConstant: style.itemHeight)
+        stackHeightConstraint = stackView.heightAnchor.constraint(equalToConstant: metrics.itemHeight)
         NSLayoutConstraint.activate([
             stackView.topAnchor.constraint(equalTo: scrollView.contentView.topAnchor),
             stackView.bottomAnchor.constraint(equalTo: scrollView.contentView.bottomAnchor),
@@ -285,7 +289,13 @@ final class SwitcherPanel: NSPanel {
     func show(windows: [WindowInfo], selectedIndex: Int) {
         applyAppearancePreference()
         installBackgroundIfNeeded()
-        applyStylePreference()
+        // The panel opens on the screen containing the mouse; its width caps
+        // the strip, which is what Icons metrics adapt to.
+        let mouseLocation = NSEvent.mouseLocation
+        guard let screen = NSScreen.screens.first(where: { NSMouseInRect(mouseLocation, $0.frame, false) })
+                ?? NSScreen.main ?? NSScreen.screens.first else { return }
+        let maxPanelWidth = screen.frame.width * maxPanelWidthFraction
+        applyStylePreference(count: windows.count, availableWidth: maxPanelWidth - panelPadding * 2)
         self.selectedIndex = selectedIndex
 
         // Clear old
@@ -299,7 +309,7 @@ final class SwitcherPanel: NSPanel {
 
         // Build new
         for (index, windowInfo) in windows.enumerated() {
-            let view = ThumbnailView(windowInfo: windowInfo, style: style)
+            let view = ThumbnailView(windowInfo: windowInfo, style: style, metrics: metrics)
             view.onClicked = { [weak self] in
                 self?.handleClick(index: index)
             }
@@ -311,15 +321,10 @@ final class SwitcherPanel: NSPanel {
             view.isSelected = (index == selectedIndex)
         }
 
-        // Size and position the panel on the screen containing the mouse.
-        let mouseLocation = NSEvent.mouseLocation
-        guard let screen = NSScreen.screens.first(where: { NSMouseInRect(mouseLocation, $0.frame, false) })
-                ?? NSScreen.main ?? NSScreen.screens.first else { return }
-        let maxPanelWidth = screen.frame.width * 0.85
-        let contentWidth = CGFloat(windows.count) * style.itemWidth
-            + CGFloat(max(0, windows.count - 1)) * style.itemSpacing
+        // Size and position the panel.
+        let contentWidth = metrics.stripWidth(count: windows.count)
         let panelWidth = min(maxPanelWidth, contentWidth + panelPadding * 2)
-        let panelHeight = style.itemHeight + style.captionRowHeight + panelPadding * 2
+        let panelHeight = metrics.itemHeight + style.captionRowHeight + panelPadding * 2
 
         let panelX = screen.frame.midX - panelWidth / 2
         let panelY = screen.frame.midY - panelHeight / 2
@@ -360,11 +365,13 @@ final class SwitcherPanel: NSPanel {
 
     // MARK: - Private
 
-    /// Re-reads the Style preference and resizes the strip for its cells.
-    private func applyStylePreference() {
+    /// Re-reads the Style preference, computes the cell metrics for this
+    /// invocation, and resizes the strip for them.
+    private func applyStylePreference(count: Int, availableWidth: CGFloat) {
         style = SwitcherStyle.resolve(UserDefaults.standard.string(forKey: SwitcherStyle.defaultsKey))
-        stackView.spacing = style.itemSpacing
-        stackHeightConstraint.constant = style.itemHeight
+        metrics = style.metrics(count: count, availableWidth: availableWidth)
+        stackView.spacing = metrics.itemSpacing
+        stackHeightConstraint.constant = metrics.itemHeight
         scrollBottomConstraint?.constant = -(panelPadding + style.captionRowHeight)
     }
 
