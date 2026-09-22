@@ -66,11 +66,11 @@ enum SwitcherStyle: String, CaseIterable {
     static let minIconSize: CGFloat = 48
     static let iconArtworkFraction: CGFloat = 0.8
     /// Native proportions, relative to the visible icon edge (measured off
-    /// same-scale photos of the Dock's switcher): the selection highlight is
-    /// a fifth larger than the icon, highlights nearly touch (icons 0.22
-    /// apart), the panel edge is 0.16 icon beyond the outer highlights (0.25
-    /// beyond the icon), and the panel top sits 0.25 icon above the icon.
-    static let highlightScale: CGFloat = 1.2
+    /// pixel screenshots of the Dock's switcher): the selection highlight is
+    /// 15% larger than the icon, highlights nearly touch (icons 0.23 apart),
+    /// the panel edge is 0.16 icon beyond the outer highlights (0.24 beyond
+    /// the icon), and the panel top sits 0.25 icon above the icon.
+    static let highlightScale: CGFloat = 1.15
     static let gapScale: CGFloat = 0.03
     static let sidePaddingScale: CGFloat = 0.16
     static let topPaddingScale: CGFloat = 0.25
@@ -83,12 +83,12 @@ enum SwitcherStyle: String, CaseIterable {
     static let captionTextHeight: CGFloat = 16
 
     /// Fraction of the screen width the panel may occupy. The native switcher
-    /// runs nearly edge to edge, which is how it keeps icons large with many
-    /// apps open; the Thumbnails strip keeps its historical 85%.
+    /// spans 90% of the screen (measured), which is how it keeps icons large
+    /// with many apps open; the Thumbnails strip keeps its historical 85%.
     var maxPanelWidthFraction: CGFloat {
         switch self {
         case .thumbnails: return 0.85
-        case .icons: return 0.95
+        case .icons: return 0.9
         }
     }
 
@@ -109,7 +109,10 @@ enum SwitcherStyle: String, CaseIterable {
             // image frame (v / artworkFraction); the highlight sits inside it.
             let frameScale = 1 / Self.iconArtworkFraction                    // 1.25
             let frameOverhang = frameScale - Self.highlightScale             // frame beyond highlight, both sides
-            let cellGapScale = Self.gapScale - frameOverhang                 // cell gap giving the highlight gap
+            // Cells cannot overlap: when the frame margin already exceeds the
+            // wanted highlight gap the cell gap is zero, and the fit must use
+            // that same clamped value or it overshoots and steps down slowly.
+            let cellGapScale = max(0, Self.gapScale - frameOverhang)         // cell gap giving the highlight gap
             let edgePadScale = Self.sidePaddingScale - frameOverhang / 2     // panel edge → first cell
             let perIcon = frameScale * n + cellGapScale * (n - 1) + 2 * edgePadScale
             // Panel top → icon top is topPaddingScale of the icon; the frame's
