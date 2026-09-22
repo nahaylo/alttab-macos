@@ -95,6 +95,8 @@ final class SwitcherPanel: NSPanel {
     /// is never truncated to the 120pt cell like the native switcher.
     private let captionLabel = NSTextField(labelWithString: "")
     private var captions: [String] = []
+    /// Display names per pid, resolved once: the lookup touches the bundle.
+    private var appDisplayNames: [pid_t: String] = [:]
     private var thumbnailViews: [ThumbnailView] = []
     private var windowIDs: [CGWindowID] = []
     private var selectedIndex: Int = 0
@@ -331,11 +333,9 @@ final class SwitcherPanel: NSPanel {
         windowIDs = windows.map { $0.windowID }
         let grouped = UserDefaults.standard.bool(forKey: AppGrouping.defaultsKey)
         captions = windows.map {
-            // ownerName is the window server's process name ("Code"); the
-            // native switcher shows the app's localized display name
-            // ("Visual Studio Code"). Cheap main-thread lookup, no IPC.
-            let appName = NSRunningApplication(processIdentifier: $0.ownerPID)?.localizedName ?? $0.ownerName
-            return SwitcherStyle.caption(windowTitle: $0.windowTitle, appName: appName, grouped: grouped)
+            SwitcherStyle.caption(windowTitle: $0.windowTitle,
+                                  appName: appDisplayName(pid: $0.ownerPID, fallback: $0.ownerName),
+                                  grouped: grouped)
         }
 
         // Build new
@@ -394,6 +394,21 @@ final class SwitcherPanel: NSPanel {
     }
 
     // MARK: - Private
+
+    /// The name the Dock and the native switcher show: the bundle's Finder
+    /// display name ("Visual Studio Code"), which can differ from both the
+    /// window server's process name ("Code") and the bundle's own
+    /// CFBundleDisplayName (also "Code" for VS Code). Falls back to the
+    /// running application's localized name, then the process name.
+    private func appDisplayName(pid: pid_t, fallback: String) -> String {
+        if let cached = appDisplayNames[pid] { return cached }
+        let app = NSRunningApplication(processIdentifier: pid)
+        let name = app?.bundleURL.map { FileManager.default.displayName(atPath: $0.path) }
+            ?? app?.localizedName
+            ?? fallback
+        appDisplayNames[pid] = name
+        return name
+    }
 
     /// Computes the cell metrics for this invocation (style already resolved
     /// by show()) and resizes the strip for them.
