@@ -59,13 +59,25 @@ enum SwitcherStyle: String, CaseIterable {
     /// a handful of apps) and the floor it shrinks to before scrolling.
     static let maxIconSize: CGFloat = 128
     static let minIconSize: CGFloat = 48
-    /// Native proportions, all relative to the icon edge: the selection
-    /// highlight is a fifth larger than the icon, and both the gap between
-    /// icons and the panel's side padding are a quarter of it.
+    /// Native proportions, all relative to the icon edge (measured off the
+    /// Dock's switcher): the selection highlight is a fifth larger than the
+    /// icon, highlights sit a tenth of an icon apart, and the panel's side
+    /// padding is about a third of an icon.
     static let highlightScale: CGFloat = 1.2
-    static let gapScale: CGFloat = 0.25
+    static let gapScale: CGFloat = 0.1
+    static let sidePaddingScale: CGFloat = 0.3
     /// Breathing room between the highlight and the cell edge, per side.
     static let highlightInset: CGFloat = 2
+
+    /// Fraction of the screen width the panel may occupy. The native switcher
+    /// runs nearly edge to edge, which is how it keeps icons large with many
+    /// apps open; the Thumbnails strip keeps its historical 85%.
+    var maxPanelWidthFraction: CGFloat {
+        switch self {
+        case .thumbnails: return 0.85
+        case .icons: return 0.95
+        }
+    }
 
     /// Cell geometry for `count` items in a panel at most `maxPanelWidth`
     /// wide. Thumbnails cells are fixed. Icons cells size their icon so the
@@ -80,15 +92,16 @@ enum SwitcherStyle: String, CaseIterable {
         case .icons:
             let n = CGFloat(max(1, count))
             // Width in terms of the icon edge i:
-            //   n * (highlightScale*i + 2*inset) + (n-1) * gapScale*i + 2 * gapScale*i <= maxPanelWidth
-            let perIcon = Self.highlightScale * n + Self.gapScale * (n - 1) + 2 * Self.gapScale
+            //   n * (highlightScale*i + 2*inset) + (n-1) * gapScale*i + 2 * sidePaddingScale*i <= maxPanelWidth
+            let perIcon = Self.highlightScale * n + Self.gapScale * (n - 1) + 2 * Self.sidePaddingScale
             let fitted = ((maxPanelWidth - 2 * Self.highlightInset * n) / perIcon).rounded(.down)
             let icon = min(Self.maxIconSize, max(Self.minIconSize, fitted))
             let highlight = (icon * Self.highlightScale).rounded()
             let gap = (icon * Self.gapScale).rounded()
+            let sidePadding = (icon * Self.sidePaddingScale).rounded()
             let side = highlight + 2 * Self.highlightInset
             return CellMetrics(iconSize: icon, highlightSize: highlight, itemWidth: side, itemHeight: side,
-                               itemSpacing: gap, panelPaddingX: gap, panelPaddingY: 12, panelCornerRadius: 28)
+                               itemSpacing: gap, panelPaddingX: sidePadding, panelPaddingY: 12, panelCornerRadius: 28)
         }
     }
 

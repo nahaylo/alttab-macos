@@ -66,9 +66,24 @@ final class SwitcherPresentationTests: XCTestCase {
         for m in [big, small] {
             XCTAssertEqual(m.highlightSize, (m.iconSize * SwitcherStyle.highlightScale).rounded())
             XCTAssertEqual(m.itemSpacing, (m.iconSize * SwitcherStyle.gapScale).rounded())
-            XCTAssertEqual(m.panelPaddingX, m.itemSpacing, "side padding equals the gap")
+            XCTAssertEqual(m.panelPaddingX, (m.iconSize * SwitcherStyle.sidePaddingScale).rounded())
         }
         XCTAssertLessThan(small.itemSpacing, big.itemSpacing)
+    }
+
+    /// Icons may use nearly the whole screen width, like the Dock's switcher;
+    /// Thumbnails keep their historical cap.
+    func testIconsPanelMayRunWiderThanThumbnails() {
+        XCTAssertEqual(SwitcherStyle.thumbnails.maxPanelWidthFraction, 0.85)
+        XCTAssertGreaterThan(SwitcherStyle.icons.maxPanelWidthFraction, SwitcherStyle.thumbnails.maxPanelWidthFraction)
+        XCTAssertLessThanOrEqual(SwitcherStyle.icons.maxPanelWidthFraction, 1.0)
+    }
+
+    /// The case that motivated the retune: ~15 apps on a 2560pt display must
+    /// not collapse back to the old 96pt cell.
+    func testFifteenAppsOnAWideDisplayKeepLargeIcons() {
+        let m = SwitcherStyle.icons.metrics(count: 15, maxPanelWidth: 2560 * SwitcherStyle.icons.maxPanelWidthFraction)
+        XCTAssertGreaterThanOrEqual(m.iconSize, 112)
     }
 
     /// The native switcher shrinks icons as apps accumulate so the row keeps

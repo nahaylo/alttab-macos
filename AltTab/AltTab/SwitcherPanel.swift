@@ -77,8 +77,6 @@ final class SwitcherPanel: NSPanel {
     /// Icons metrics also depend on the item count and the screen width.
     private var style: SwitcherStyle = SwitcherStyle.defaultStyle
     private var metrics = SwitcherStyle.defaultStyle.metrics(count: 0, maxPanelWidth: 0)
-    /// Fraction of the screen width the panel may occupy.
-    private let maxPanelWidthFraction: CGFloat = 0.85
 
     private var scrollView: NSScrollView!
     private var stackView: NSStackView!
@@ -311,7 +309,8 @@ final class SwitcherPanel: NSPanel {
         let mouseLocation = NSEvent.mouseLocation
         guard let screen = NSScreen.screens.first(where: { NSMouseInRect(mouseLocation, $0.frame, false) })
                 ?? NSScreen.main ?? NSScreen.screens.first else { return }
-        let maxPanelWidth = screen.frame.width * maxPanelWidthFraction
+        style = SwitcherStyle.resolve(UserDefaults.standard.string(forKey: SwitcherStyle.defaultsKey))
+        let maxPanelWidth = screen.frame.width * style.maxPanelWidthFraction
         applyStylePreference(count: windows.count, maxPanelWidth: maxPanelWidth)
         installBackgroundIfNeeded()
         self.selectedIndex = selectedIndex
@@ -382,10 +381,9 @@ final class SwitcherPanel: NSPanel {
 
     // MARK: - Private
 
-    /// Re-reads the Style preference, computes the cell metrics for this
-    /// invocation, and resizes the strip for them.
+    /// Computes the cell metrics for this invocation (style already resolved
+    /// by show()) and resizes the strip for them.
     private func applyStylePreference(count: Int, maxPanelWidth: CGFloat) {
-        style = SwitcherStyle.resolve(UserDefaults.standard.string(forKey: SwitcherStyle.defaultsKey))
         metrics = style.metrics(count: count, maxPanelWidth: maxPanelWidth)
         stackView.spacing = metrics.itemSpacing
         stackHeightConstraint.constant = metrics.itemHeight
