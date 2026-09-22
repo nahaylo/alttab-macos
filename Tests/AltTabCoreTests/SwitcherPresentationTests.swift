@@ -71,8 +71,10 @@ final class SwitcherPresentationTests: XCTestCase {
             let v = m.iconSize
             XCTAssertEqual(m.iconFrame, (v / SwitcherStyle.iconArtworkFraction).rounded())
             XCTAssertEqual(m.highlightSize, (v * SwitcherStyle.highlightScale).rounded())
+            // Cells cannot overlap, so the highlight gap bottoms out at the
+            // image frame's margin around the highlight.
             let highlightGap = m.itemSpacing + (m.itemWidth - m.highlightSize)
-            XCTAssertEqual(highlightGap, v * SwitcherStyle.gapScale, accuracy: 1.5)
+            XCTAssertEqual(highlightGap, max(v * SwitcherStyle.gapScale, m.itemWidth - m.highlightSize), accuracy: 1.5)
             let edgeToHighlight = m.panelPaddingX + (m.itemWidth - m.highlightSize) / 2
             XCTAssertEqual(edgeToHighlight, v * SwitcherStyle.sidePaddingScale, accuracy: 1.5)
         }
