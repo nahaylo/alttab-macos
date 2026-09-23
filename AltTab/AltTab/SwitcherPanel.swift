@@ -7,9 +7,11 @@
 //  above all windows without stealing focus — critical for the Option-release
 //  activation flow. The background is user-selectable (status menu →
 //  Background): an opaque solid plate (default, WCAG AA-tested label
-//  contrast), the classic translucent HUD material, or native Liquid Glass
-//  on macOS 26+. Content lives in an NSScrollView wrapping a horizontal
-//  NSStackView of ThumbnailView cells. Appears centered on the screen that
+//  contrast), the classic translucent HUD material, native Liquid Glass on
+//  macOS 26+, or "System" — whatever the Dock's own app switcher draws on
+//  the running OS (regular Liquid Glass on 26+, the HUD material before).
+//  Content lives in an NSScrollView wrapping a horizontal NSStackView of
+//  ThumbnailView cells, sized per the Style preference (SwitcherStyle). Appears centered on the screen that
 //  contains the mouse pointer. Thumbnail clicks are reported through the
 //  onWindowClicked callback; previews arriving later are patched into cells
 //  in place via updateThumbnail(windowID:image:).
@@ -30,9 +32,13 @@ final class SwitcherPanel: NSPanel {
     /// UserDefaults key for the appearance override: absent/"system", "light", or "dark".
     static let appearanceDefaultsKey = "AppearanceOverride"
 
-    /// UserDefaults key for the panel background style: absent/"solid",
-    /// "transparent", or "glass".
+    /// UserDefaults key for the panel background style: absent/"system",
+    /// "solid", "transparent", or "glass".
     static let backgroundDefaultsKey = "BackgroundStyle"
+    /// System — the OS's own switcher material — is the default. Solid (the
+    /// WCAG AA-tested plate) remains available for anyone who needs the
+    /// guaranteed label contrast.
+    static let defaultBackground = "system"
 
     /// UserDefaults key for the Liquid Glass strength: absent/"high" (the
     /// original look), "light", "medium", or "max". Only used with "glass".
@@ -43,31 +49,65 @@ final class SwitcherPanel: NSPanel {
     }
 
     private enum BackgroundStyle: String {
-        case solid, transparent, glass
+        case solid, transparent, glass, system
 
-        /// Resolves the stored preference: unknown values map to solid, and
-        /// "glass" falls back to solid on macOS < 26 where NSGlassEffectView
-        /// does not exist.
-        static func current() -> BackgroundStyle {
-            let raw = UserDefaults.standard.string(forKey: SwitcherPanel.backgroundDefaultsKey) ?? "solid"
-            let style = BackgroundStyle(rawValue: raw) ?? .solid
-            if style == .glass {
-                guard #available(macOS 26.0, *) else { return .solid }
+        /// Resolves the stored preference to a drawable style plus the glass
+        /// strength to draw it with. Unknown values map to system; "glass"
+        /// falls back to solid on macOS < 26 where NSGlassEffectView does not
+        /// exist; "system" is what the Dock's own switcher draws on this OS —
+        /// Liquid Glass at the OS default (`followsSystem`: the view's style
+        /// and tint are left untouched, so Appearance/Accessibility settings
+        /// and any future default apply as-is) on 26+, the translucent HUD
+        /// material before — so it never returns .system.
+        static func resolved() -> (style: BackgroundStyle, strength: GlassStrength, followsSystem: Bool) {
+            let raw = UserDefaults.standard.string(forKey: SwitcherPanel.backgroundDefaultsKey) ?? SwitcherPanel.defaultBackground
+            let stored = BackgroundStyle(rawValue: raw) ?? .system
+            switch stored {
+            case .system:
+                if #available(macOS 26.0, *) { return (.glass, GlassStrength.defaultLevel, true) }
+                return (.transparent, GlassStrength.defaultLevel, true)
+            case .glass:
+                guard #available(macOS 26.0, *) else { return (.solid, SwitcherPanel.currentGlassStrength(), false) }
+                return (.glass, SwitcherPanel.currentGlassStrength(), false)
+            case .solid, .transparent:
+                return (stored, SwitcherPanel.currentGlassStrength(), false)
             }
-            return style
         }
     }
 
     private var installedStyle: BackgroundStyle?
     private var installedGlassStrength: GlassStrength?
+    private var installedFollowsSystem: Bool?
+    private var installedCornerRadius: CGFloat?
 
-    private let itemWidth: CGFloat = 180
-    private let itemHeight: CGFloat = 160
-    private let itemSpacing: CGFloat = 12
-    private let panelPadding: CGFloat = 20
+    /// Cell geometry comes from the Style preference, re-read on every show();
+    /// Icons metrics also depend on the item count and the screen width.
+    private var style: SwitcherStyle = SwitcherStyle.defaultStyle
+    private var metrics = SwitcherStyle.defaultStyle.metrics(count: 0, maxPanelWidth: 0)
 
     private var scrollView: NSScrollView!
+    /// The scroll view's document: the strip plus the panel padding around
+    /// it. The scroll view itself fills the panel, so cell content that
+    /// overhangs its cell (badges, the icon frame's transparent margin) is
+    /// never clipped at the strip's edge — only at the panel's.
+    private var stripDocument: NSView!
     private var stackView: NSStackView!
+    private var stackHeightConstraint: NSLayoutConstraint!
+    /// Strip insets inside the document: the panel padding, plus the caption
+    /// row at the bottom. Re-tuned per style on every show().
+    private var stackTopConstraint: NSLayoutConstraint!
+    private var stackBottomConstraint: NSLayoutConstraint!
+    private var stackLeadingConstraint: NSLayoutConstraint!
+    private var stackTrailingConstraint: NSLayoutConstraint!
+    /// Dock badges per pid for the current session (applied on every rebuild).
+    private var badges: [pid_t: String] = [:]
+    /// Icons style: the selected item's caption, floating under its icon at
+    /// panel level (frame-positioned, clamped to the panel) so a long name
+    /// is never truncated to the 120pt cell like the native switcher.
+    private let captionLabel = NSTextField(labelWithString: "")
+    private var captions: [String] = []
+    /// Display names per pid, resolved once: the lookup touches the bundle.
+    private var appDisplayNames: [pid_t: String] = [:]
     private var thumbnailViews: [ThumbnailView] = []
     private var windowIDs: [CGWindowID] = []
     private var selectedIndex: Int = 0
@@ -106,30 +146,49 @@ final class SwitcherPanel: NSPanel {
 
         stackView = NSStackView()
         stackView.orientation = .horizontal
-        stackView.spacing = itemSpacing
+        stackView.spacing = metrics.itemSpacing
         stackView.translatesAutoresizingMaskIntoConstraints = false
 
-        scrollView.documentView = stackView
+        stripDocument = NSView()
+        stripDocument.translatesAutoresizingMaskIntoConstraints = false
+        stripDocument.addSubview(stackView)
+        scrollView.documentView = stripDocument
+        stackHeightConstraint = stackView.heightAnchor.constraint(equalToConstant: metrics.itemHeight)
+        stackTopConstraint = stackView.topAnchor.constraint(equalTo: stripDocument.topAnchor)
+        stackBottomConstraint = stackView.bottomAnchor.constraint(equalTo: stripDocument.bottomAnchor)
+        stackLeadingConstraint = stackView.leadingAnchor.constraint(equalTo: stripDocument.leadingAnchor)
+        stackTrailingConstraint = stackView.trailingAnchor.constraint(equalTo: stripDocument.trailingAnchor)
         NSLayoutConstraint.activate([
-            stackView.topAnchor.constraint(equalTo: scrollView.contentView.topAnchor),
-            stackView.bottomAnchor.constraint(equalTo: scrollView.contentView.bottomAnchor),
-            stackView.leadingAnchor.constraint(equalTo: scrollView.contentView.leadingAnchor),
-            stackView.heightAnchor.constraint(equalToConstant: itemHeight),
+            stripDocument.topAnchor.constraint(equalTo: scrollView.contentView.topAnchor),
+            stripDocument.bottomAnchor.constraint(equalTo: scrollView.contentView.bottomAnchor),
+            stripDocument.leadingAnchor.constraint(equalTo: scrollView.contentView.leadingAnchor),
+            stackTopConstraint, stackBottomConstraint, stackLeadingConstraint, stackTrailingConstraint,
+            stackHeightConstraint,
         ])
+        applyStripInsets()
 
-        installBackground(BackgroundStyle.current(), glassStrength: Self.currentGlassStrength())
+        captionLabel.font = NSFont.systemFont(ofSize: 13, weight: .semibold)
+        captionLabel.textColor = .labelColor
+        captionLabel.alignment = .center
+        captionLabel.lineBreakMode = .byTruncatingMiddle
+        captionLabel.maximumNumberOfLines = 1
+        captionLabel.isHidden = true
+
+        let background = BackgroundStyle.resolved()
+        installBackground(background.style, glassStrength: background.strength,
+                          followsSystem: background.followsSystem, cornerRadius: metrics.panelCornerRadius)
     }
 
     /// The opaque, appearance-adaptive plate whose label contrast the
     /// WCAGContrastTests guarantee (>= 4.5:1, WCAG AA). Also the fallback
     /// for unavailable styles.
-    private static func makeSolidBackground() -> NSBox {
+    private static func makeSolidBackground(cornerRadius: CGFloat) -> NSBox {
         let box = NSBox()
         box.boxType = .custom
         box.titlePosition = .noTitle
         box.fillColor = .windowBackgroundColor
         box.borderWidth = 0
-        box.cornerRadius = 16
+        box.cornerRadius = cornerRadius
         box.contentViewMargins = .zero
         return box
     }
@@ -140,7 +199,7 @@ final class SwitcherPanel: NSPanel {
     /// view. The fill is a dynamic color so it re-resolves on Light/Dark
     /// changes — withAlphaComponent() on the catalog color directly would
     /// freeze whichever appearance is current at creation time.
-    private static func makeGlassHost(plateAlpha: CGFloat) -> NSView {
+    private static func makeGlassHost(plateAlpha: CGFloat, cornerRadius: CGFloat) -> NSView {
         guard plateAlpha > 0 else {
             let host = NSView()
             host.translatesAutoresizingMaskIntoConstraints = false
@@ -157,7 +216,7 @@ final class SwitcherPanel: NSPanel {
             return color
         }
         plate.borderWidth = 0
-        plate.cornerRadius = 16
+        plate.cornerRadius = cornerRadius
         plate.contentViewMargins = .zero
         plate.translatesAutoresizingMaskIntoConstraints = false
         return plate
@@ -165,24 +224,29 @@ final class SwitcherPanel: NSPanel {
 
     /// Re-installs the background root only when a preference changed.
     private func installBackgroundIfNeeded() {
-        let style = BackgroundStyle.current()
-        let strength = Self.currentGlassStrength()
-        if style != installedStyle || (style == .glass && strength != installedGlassStrength) {
-            installBackground(style, glassStrength: strength)
+        let (style, strength, followsSystem) = BackgroundStyle.resolved()
+        let radius = metrics.panelCornerRadius
+        if style != installedStyle || (style == .glass && strength != installedGlassStrength)
+            || followsSystem != installedFollowsSystem || radius != installedCornerRadius {
+            installBackground(style, glassStrength: strength, followsSystem: followsSystem, cornerRadius: radius)
         }
     }
 
     /// Builds the root view for the style and re-parents the persistent
     /// scroll view into it with the standard panel padding.
-    private func installBackground(_ style: BackgroundStyle, glassStrength: GlassStrength) {
+    private func installBackground(_ style: BackgroundStyle, glassStrength: GlassStrength,
+                                   followsSystem: Bool, cornerRadius: CGFloat) {
         scrollView.removeFromSuperview()
+        captionLabel.removeFromSuperview()
 
         let root: NSView
         let scrollHost: NSView
 
         switch style {
-        case .solid:
-            let box = Self.makeSolidBackground()
+        case .solid, .system:
+            // .system is unreachable: resolved() always maps it to a drawable
+            // style. Kept for exhaustiveness.
+            let box = Self.makeSolidBackground(cornerRadius: cornerRadius)
             root = box
             scrollHost = box
 
@@ -196,7 +260,7 @@ final class SwitcherPanel: NSPanel {
             effect.blendingMode = .behindWindow
             effect.state = .active
             effect.wantsLayer = true
-            effect.layer?.cornerRadius = 16
+            effect.layer?.cornerRadius = cornerRadius
             effect.layer?.masksToBounds = true
             root = effect
             scrollHost = effect
@@ -214,9 +278,14 @@ final class SwitcherPanel: NSPanel {
                 // the two knobs there are: the clear style for Max, and the
                 // host's translucent plate for Light / Medium (see GlassStrength).
                 let glass = NSGlassEffectView()
-                glass.cornerRadius = 16
-                glass.style = glassStrength.usesClearStyle ? .clear : .regular
-                let host = Self.makeGlassHost(plateAlpha: glassStrength.plateAlpha)
+                glass.cornerRadius = cornerRadius
+                // Background: System leaves the style at the OS default so the
+                // user's Appearance / Accessibility glass settings, and any
+                // future default, apply unmodified.
+                if !followsSystem {
+                    glass.style = glassStrength.usesClearStyle ? .clear : .regular
+                }
+                let host = Self.makeGlassHost(plateAlpha: glassStrength.plateAlpha, cornerRadius: cornerRadius)
                 glass.contentView = host
                 NSLayoutConstraint.activate([
                     host.topAnchor.constraint(equalTo: glass.topAnchor),
@@ -227,9 +296,9 @@ final class SwitcherPanel: NSPanel {
                 root = glass
                 scrollHost = host
             } else {
-                // Unreachable: BackgroundStyle.current() never yields .glass
+                // Unreachable: BackgroundStyle.resolved() never yields .glass
                 // below macOS 26. Kept for exhaustiveness.
-                let box = Self.makeSolidBackground()
+                let box = Self.makeSolidBackground(cornerRadius: cornerRadius)
                 root = box
                 scrollHost = box
             }
@@ -237,20 +306,41 @@ final class SwitcherPanel: NSPanel {
 
         contentView = root
         scrollHost.addSubview(scrollView)
+        scrollHost.addSubview(captionLabel)
+        // The scroll view fills the panel; padding lives inside its document.
         NSLayoutConstraint.activate([
-            scrollView.topAnchor.constraint(equalTo: scrollHost.topAnchor, constant: panelPadding),
-            scrollView.bottomAnchor.constraint(equalTo: scrollHost.bottomAnchor, constant: -panelPadding),
-            scrollView.leadingAnchor.constraint(equalTo: scrollHost.leadingAnchor, constant: panelPadding),
-            scrollView.trailingAnchor.constraint(equalTo: scrollHost.trailingAnchor, constant: -panelPadding),
+            scrollView.topAnchor.constraint(equalTo: scrollHost.topAnchor),
+            scrollView.bottomAnchor.constraint(equalTo: scrollHost.bottomAnchor),
+            scrollView.leadingAnchor.constraint(equalTo: scrollHost.leadingAnchor),
+            scrollView.trailingAnchor.constraint(equalTo: scrollHost.trailingAnchor),
         ])
         installedStyle = style
         installedGlassStrength = glassStrength
+        installedFollowsSystem = followsSystem
+        installedCornerRadius = cornerRadius
+    }
+
+    /// Insets the strip by the current metrics' padding (plus the caption row).
+    private func applyStripInsets() {
+        stackTopConstraint.constant = metrics.panelPaddingY
+        stackBottomConstraint.constant = -(metrics.panelPaddingBottom + metrics.captionRowHeight)
+        stackLeadingConstraint.constant = metrics.panelPaddingX
+        stackTrailingConstraint.constant = -metrics.panelPaddingX
     }
 
     // MARK: - Public API
 
     func show(windows: [WindowInfo], selectedIndex: Int) {
         applyAppearancePreference()
+        // The panel opens on the screen containing the mouse; its width caps
+        // the strip, which is what Icons metrics adapt to. Metrics first: the
+        // background's corner radius and the strip insets depend on them.
+        let mouseLocation = NSEvent.mouseLocation
+        guard let screen = NSScreen.screens.first(where: { NSMouseInRect(mouseLocation, $0.frame, false) })
+                ?? NSScreen.main ?? NSScreen.screens.first else { return }
+        style = SwitcherStyle.resolve(UserDefaults.standard.string(forKey: SwitcherStyle.defaultsKey))
+        let maxPanelWidth = screen.frame.width * style.maxPanelWidthFraction
+        applyStylePreference(count: windows.count, maxPanelWidth: maxPanelWidth)
         installBackgroundIfNeeded()
         self.selectedIndex = selectedIndex
 
@@ -258,10 +348,16 @@ final class SwitcherPanel: NSPanel {
         thumbnailViews.forEach { $0.removeFromSuperview() }
         thumbnailViews.removeAll()
         windowIDs = windows.map { $0.windowID }
+        let grouped = AppGrouping.resolve(UserDefaults.standard.object(forKey: AppGrouping.defaultsKey) as? Bool)
+        captions = windows.map {
+            SwitcherStyle.caption(windowTitle: $0.windowTitle,
+                                  appName: appDisplayName(pid: $0.ownerPID, fallback: $0.ownerName),
+                                  grouped: grouped)
+        }
 
         // Build new
         for (index, windowInfo) in windows.enumerated() {
-            let view = ThumbnailView(windowInfo: windowInfo, width: itemWidth, height: itemHeight)
+            let view = ThumbnailView(windowInfo: windowInfo, style: style, metrics: metrics)
             view.onClicked = { [weak self] in
                 self?.handleClick(index: index)
             }
@@ -271,16 +367,12 @@ final class SwitcherPanel: NSPanel {
             stackView.addArrangedSubview(view)
             thumbnailViews.append(view)
             view.isSelected = (index == selectedIndex)
+            view.setBadge(badges[windowInfo.ownerPID])
         }
 
-        // Size and position the panel on the screen containing the mouse.
-        let mouseLocation = NSEvent.mouseLocation
-        guard let screen = NSScreen.screens.first(where: { NSMouseInRect(mouseLocation, $0.frame, false) })
-                ?? NSScreen.main ?? NSScreen.screens.first else { return }
-        let maxPanelWidth = screen.frame.width * 0.85
-        let contentWidth = CGFloat(windows.count) * itemWidth + CGFloat(max(0, windows.count - 1)) * itemSpacing
-        let panelWidth = min(maxPanelWidth, contentWidth + panelPadding * 2)
-        let panelHeight = itemHeight + panelPadding * 2
+        // Size and position the panel.
+        let panelWidth = min(maxPanelWidth, metrics.panelWidth(count: windows.count))
+        let panelHeight = metrics.panelHeight
 
         let panelX = screen.frame.midX - panelWidth / 2
         let panelY = screen.frame.midY - panelHeight / 2
@@ -289,6 +381,7 @@ final class SwitcherPanel: NSPanel {
 
         orderFrontRegardless()
         scrollToSelected()
+        positionCaption()
     }
 
     func updateSelection(index: Int) {
@@ -299,6 +392,16 @@ final class SwitcherPanel: NSPanel {
         selectedIndex = index
         thumbnailViews[selectedIndex].isSelected = true
         scrollToSelected()
+        positionCaption()
+    }
+
+    /// Applies Dock badges (text per pid) to the cells and keeps them for
+    /// rebuilds within this session; dismiss() clears them.
+    func updateBadges(_ badges: [pid_t: String]) {
+        self.badges = badges
+        for view in thumbnailViews {
+            view.setBadge(badges[view.ownerPID])
+        }
     }
 
     /// Patches a captured preview into its cell without rebuilding the panel.
@@ -313,9 +416,65 @@ final class SwitcherPanel: NSPanel {
         thumbnailViews.forEach { $0.removeFromSuperview() }
         thumbnailViews.removeAll()
         windowIDs.removeAll()
+        captions.removeAll()
+        captionLabel.isHidden = true
+        badges.removeAll()
     }
 
     // MARK: - Private
+
+    /// The name the Dock and the native switcher show: the bundle's Finder
+    /// display name ("Visual Studio Code"), which can differ from both the
+    /// window server's process name ("Code") and the bundle's own
+    /// CFBundleDisplayName (also "Code" for VS Code). Falls back to the
+    /// running application's localized name, then the process name.
+    private func appDisplayName(pid: pid_t, fallback: String) -> String {
+        if let cached = appDisplayNames[pid] { return cached }
+        let app = NSRunningApplication(processIdentifier: pid)
+        let name = app?.bundleURL.map { FileManager.default.displayName(atPath: $0.path) }
+            ?? app?.localizedName
+            ?? fallback
+        appDisplayNames[pid] = name
+        return name
+    }
+
+    /// Computes the cell metrics for this invocation (style already resolved
+    /// by show()) and resizes the strip for them.
+    private func applyStylePreference(count: Int, maxPanelWidth: CGFloat) {
+        metrics = style.metrics(count: count, maxPanelWidth: maxPanelWidth)
+        stackView.spacing = metrics.itemSpacing
+        stackHeightConstraint.constant = metrics.itemHeight
+        applyStripInsets()
+    }
+
+    /// Icons style: lays the selected item's caption out in the caption row,
+    /// centered under its icon and clamped inside the panel padding. Sized to
+    /// the text, so it spans neighbouring cells rather than truncating; only
+    /// a name wider than the whole panel is (middle-)truncated.
+    private func positionCaption() {
+        guard metrics.captionRowHeight > 0, selectedIndex < thumbnailViews.count,
+              selectedIndex < captions.count, let host = captionLabel.superview else {
+            captionLabel.isHidden = true
+            return
+        }
+        captionLabel.stringValue = captions[selectedIndex]
+        captionLabel.isHidden = false
+        captionLabel.sizeToFit()
+        host.layoutSubtreeIfNeeded()
+
+        let cell = thumbnailViews[selectedIndex]
+        let cellInHost = cell.convert(cell.bounds, to: host)
+        let padX = metrics.panelPaddingX
+        let maxWidth = max(0, host.bounds.width - padX * 2)
+        let size = NSSize(width: min(captionLabel.frame.width, maxWidth), height: captionLabel.frame.height)
+        let minX = padX
+        let maxX = host.bounds.width - padX - size.width
+        let x = min(max(cellInHost.midX - size.width / 2, minX), maxX)
+        // The text sits at the bottom of the caption row, i.e. captionGapScale
+        // of an icon under the artwork, with panelPaddingBottom beneath it.
+        let y = metrics.panelPaddingBottom
+        captionLabel.frame = NSRect(x: x, y: y, width: size.width, height: size.height)
+    }
 
     /// Applies the user's appearance preference; nil follows the OS theme.
     private func applyAppearancePreference() {
@@ -329,7 +488,9 @@ final class SwitcherPanel: NSPanel {
     private func scrollToSelected() {
         guard selectedIndex < thumbnailViews.count else { return }
         let view = thumbnailViews[selectedIndex]
-        scrollView.contentView.scrollToVisible(view.frame)
+        // Cell frames are in stack coordinates; the document is the strip
+        // plus padding, so convert before asking the clip view to scroll.
+        scrollView.contentView.scrollToVisible(view.convert(view.bounds, to: stripDocument))
     }
 
     private func handleClick(index: Int) {

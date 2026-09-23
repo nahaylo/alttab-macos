@@ -25,6 +25,8 @@
 		A100001800000000000000C5 /* GatherMerge.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200001800000000000000C5; };
 		A100001900000000000000C6 /* Debouncer.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200001900000000000000C6; };
 		A100002000000000000000C7 /* GlassStrength.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200002000000000000000C7; };
+		A100002100000000000000C8 /* SwitcherPresentation.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200002100000000000000C8; };
+		A100002200000000000000C9 /* DockBadgeReader.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200002200000000000000C9; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -48,6 +50,8 @@
 		A200001800000000000000C5 /* GatherMerge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GatherMerge.swift; sourceTree = "<group>"; };
 		A200001900000000000000C6 /* Debouncer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Debouncer.swift; sourceTree = "<group>"; };
 		A200002000000000000000C7 /* GlassStrength.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlassStrength.swift; sourceTree = "<group>"; };
+		A200002100000000000000C8 /* SwitcherPresentation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwitcherPresentation.swift; sourceTree = "<group>"; };
+		A200002200000000000000C9 /* DockBadgeReader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DockBadgeReader.swift; sourceTree = "<group>"; };
 		A3000001000000000000000D /* AltTab.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = AltTab.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -82,6 +86,8 @@
 				A200001800000000000000C5 /* GatherMerge.swift */,
 				A200001900000000000000C6 /* Debouncer.swift */,
 				A200002000000000000000C7 /* GlassStrength.swift */,
+				A200002100000000000000C8 /* SwitcherPresentation.swift */,
+				A200002200000000000000C9 /* DockBadgeReader.swift */,
 				A200001600000000000000C3 /* WCAGContrast.swift */,
 				A20000040000000000000004 /* WindowCapture.swift */,
 				A20000050000000000000005 /* SwitcherPanel.swift */,
@@ -183,6 +189,8 @@
 				A100001800000000000000C5 /* GatherMerge.swift in Sources */,
 				A100001900000000000000C6 /* Debouncer.swift in Sources */,
 				A100002000000000000000C7 /* GlassStrength.swift in Sources */,
+				A100002100000000000000C8 /* SwitcherPresentation.swift in Sources */,
+				A100002200000000000000C9 /* DockBadgeReader.swift in Sources */,
 				A100001600000000000000C3 /* WCAGContrast.swift in Sources */,
 				A10000040000000000000004 /* WindowCapture.swift in Sources */,
 				A10000050000000000000005 /* SwitcherPanel.swift in Sources */,
@@ -320,7 +328,7 @@
 				CODE_SIGN_ENTITLEMENTS = AltTab/AltTab.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 11;
+				CURRENT_PROJECT_VERSION = 12;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = AltTab/Info.plist;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
@@ -328,7 +336,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 1.3.4;
+				MARKETING_VERSION = 1.4.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.alttab.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -343,7 +351,7 @@
 				CODE_SIGN_ENTITLEMENTS = AltTab/AltTab.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 11;
+				CURRENT_PROJECT_VERSION = 12;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = AltTab/Info.plist;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
@@ -351,7 +359,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 1.3.4;
+				MARKETING_VERSION = 1.4.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.alttab.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;

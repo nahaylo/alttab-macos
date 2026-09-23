@@ -5,6 +5,19 @@ All notable changes to AltTab will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.0] - 2026-09-23
+
+### Added
+
+- **Group by Application** (status menu, **on by default**): the list collapses to one entry per app — its most recently used window — so it reads as apps ordered by latest use, like the system switcher. Confirming activates that window; Q/H act on the app. The first-Tab anchor maps the focused window onto its app's entry, so a stale cache can't make the first Tab re-select the current app. Pure `AppGrouping` (unit-tested).
+- **Style** (status menu): **Icons** (**default**) or **Thumbnails** (the existing cell) — Icons is the native Cmd-Tab look: app icons sized to fit — 128pt for a few items, shrinking as the list grows so the whole panel fits 85% of the screen width, down to a 48pt floor past which the strip scrolls — with the highlight, gaps, side padding and panel corners all proportional to the icon as in the native switcher (pure `CellMetrics`, unit-tested) — a filled rounded highlight behind the selection instead of a border, and the selected item's name floating beneath it at panel level (app name when grouped, window title otherwise) — sized to the text and clamped to the panel, so it is never truncated to the cell width. Icons style never starts a preview capture, so it never touches Screen Recording; "Show Window Previews" is greyed out under it. Cell geometry lives in the pure `SwitcherStyle` type (unit-tested).
+- **Dock badges** in Icons style: each icon shows its app's Dock badge (unread count or dot) at the top-right corner like the native switcher. Read once per invocation from the Dock's Accessibility tree (its items expose the badge as `AXStatusLabel`) off the main thread — no extra permission, the Accessibility grant already covers it; the pure `DockBadges` matcher (bundle path, then title) is unit-tested.
+- **Background → System**: draws what the Dock's own app switcher uses on the running OS — regular Liquid Glass on macOS 26+, the translucent HUD material before. Glass Strength is greyed out under it (the system look fixes the strength); an explicit Liquid Glass choice keeps honoring it.
+
+### Changed
+
+- **New defaults**: Group by Application on, Style Icons, Background System — out of the box the switcher now looks and lists like the built-in Cmd-Tab (Switcher Key stays Option by default; set it to Command to replace the system switcher). Anyone who never changed these settings gets the new look; an explicit choice is kept. Solid, the WCAG AA-tested background, is still one click away.
+
 ## [1.3.4] - 2026-09-23
 
 ### Added
@@ -159,6 +172,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Build/install script with `--system` flag for /Applications
 - Shift-Tab, Arrow keys, Escape, Enter, and mouse click navigation
 
+[1.4.0]: https://github.com/sergio-farfan/alttab-macos/releases/tag/v1.4.0
 [1.3.4]: https://github.com/sergio-farfan/alttab-macos/releases/tag/v1.3.4
 [1.3.3]: https://github.com/sergio-farfan/alttab-macos/releases/tag/v1.3.3
 [1.3.2]: https://github.com/sergio-farfan/alttab-macos/releases/tag/v1.3.2
