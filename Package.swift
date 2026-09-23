@@ -31,7 +31,7 @@ let package = Package(
             ],
             sources: ["MRUOrder.swift", "SwitcherStateMachine.swift", "SwitcherSelection.swift",
                       "WCAGContrast.swift", "GatherMerge.swift", "Debouncer.swift", "GlassStrength.swift",
-                      "SwitcherPresentation.swift"]
+                      "SwitcherPresentation.swift", "DockClick.swift"]
         ),
         .testTarget(
             name: "AltTabCoreTests",

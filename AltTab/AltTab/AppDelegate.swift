@@ -28,6 +28,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, HotkeyDelegate {
     private var windowModel: WindowModel!
     private var windowCapture: WindowCapture!
     private let dockBadgeReader = DockBadgeReader()
+    private var dockClickInterceptor: DockClickInterceptor!
     private var switcherPanel: SwitcherPanel!
     private var permissionManager: PermissionManager!
 
@@ -73,8 +74,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, HotkeyDelegate {
             NSLog("AltTab: Switcher Key set to %@", modifier.rawValue)
         }
 
+        setupDockClick()
+
         if AXIsProcessTrusted() {
-            hotkeyManager.start()
+            startEventTaps()
             NSLog("AltTab: Accessibility already granted, hotkey active")
         } else {
             // At login the TCC daemon may not be ready yet, causing a false negative.
@@ -88,7 +91,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, HotkeyDelegate {
                     // registrations failed — intra-app focus tracking would
                     // stay dead until relaunch without this.
                     self.windowModel.reinstallAXObservers()
-                    self.hotkeyManager.start()
+                    self.startEventTaps()
                 } else {
                     NSLog("AltTab: Accessibility still not trusted, prompting user")
                     self.permissionManager.ensureAccessibility()
@@ -97,10 +100,58 @@ class AppDelegate: NSObject, NSApplicationDelegate, HotkeyDelegate {
                     ) { [weak self] _ in
                         NSLog("AltTab: Accessibility granted, starting hotkey manager")
                         self?.windowModel.reinstallAXObservers()
-                        self?.hotkeyManager.start()
+                        self?.startEventTaps()
                     }
                 }
             }
+        }
+    }
+
+    /// Both taps need Accessibility: the hotkey tap always, the Dock click
+    /// tap only while its setting is on.
+    private func startEventTaps() {
+        hotkeyManager.start()
+        if PreferencesMenu.dockClickEnabled {
+            dockClickInterceptor.start()
+        }
+    }
+
+    // MARK: - Dock Click
+
+    /// A plain click on a running app's Dock icon raises only that app's
+    /// most recent window — the same window confirming its switcher entry
+    /// would — instead of all of them. Policy in the pure `DockClickPolicy`;
+    /// the click is handed back to the Dock whenever it returns nil.
+    private func setupDockClick() {
+        dockClickInterceptor = DockClickInterceptor(dockReader: dockBadgeReader)
+        dockClickInterceptor.resolveWindow = { [weak self] item in
+            guard let self = self else { return nil }
+            let apps = NSWorkspace.shared.runningApplications.map {
+                DockBadges.App(pid: $0.processIdentifier, bundlePath: $0.bundleURL?.path, name: $0.localizedName ?? "")
+            }
+            // The cache can hold ghosts (windows closed since the last
+            // gather): take the app's most recent window that still exists.
+            let cached = self.windowModel.windowsFromCache()
+            guard let first = DockClickPolicy.windowToRaise(item: item, apps: apps,
+                                                            frontmostPID: NSWorkspace.shared.frontmostApplication?.processIdentifier,
+                                                            windows: cached, ownerPID: { $0.ownerPID }) else { return nil }
+            let candidates = cached.filter { $0.ownerPID == first.ownerPID }
+            let live = WindowActivator.liveWindowIDs(candidates.map { $0.windowID })
+            return candidates.first { live.contains($0.windowID) }
+        }
+        dockClickInterceptor.onActivate = { [weak self] window in
+            NSLog("AltTab: Dock click → raising %@ (pid %d) only", window.windowTitle, window.ownerPID)
+            WindowActivator.activate(window: window)
+            self?.windowModel.noteExplicitActivation(pid: window.ownerPID, windowID: window.windowID)
+        }
+        preferencesMenu.onDockClickChanged = { [weak self] enabled in
+            guard let self = self else { return }
+            if enabled {
+                if AXIsProcessTrusted() { self.dockClickInterceptor.start() }
+            } else {
+                self.dockClickInterceptor.stop()
+            }
+            NSLog("AltTab: Dock click %@", enabled ? "on" : "off")
         }
     }
 

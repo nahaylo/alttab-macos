@@ -5,8 +5,9 @@
 //  Status bar dropdown menu with "Launch at Login" toggle (via SMAppService
 //  on macOS 13+), "Switcher Key" submenu (Option / Command — Command
 //  replaces the system app switcher), "Group by Application" toggle (one
-//  entry per app, like the system switcher), "Style" submenu (Thumbnails /
-//  Icons), "Appearance" submenu (System / Light / Dark switcher theme
+//  entry per app, like the system switcher), "Dock Click Opens Recent
+//  Window" toggle (a Dock click raises one window, like the switcher),
+//  "Style" submenu (Thumbnails / Icons), "Appearance" submenu (System / Light / Dark switcher theme
 //  override), "Background" submenu (System / Solid / Transparent / Liquid
 //  Glass on macOS 26+), "Show Window Previews" toggle (ScreenCaptureKit
 //  previews, macOS 14+, requires Screen Recording; Thumbnails style only),
@@ -33,6 +34,10 @@ final class PreferencesMenu {
     /// Called on the main thread when the user picks a different Switcher
     /// Key; AppDelegate forwards it to HotkeyManager so it applies at once.
     var onModifierChanged: ((SwitcherModifier) -> Void)?
+
+    /// Called on the main thread when the user toggles "Dock Click Opens
+    /// Recent Window"; AppDelegate starts or stops the Dock click tap.
+    var onDockClickChanged: ((Bool) -> Void)?
 
     /// "Show Window Previews" — greyed out in Icons style, which has no
     /// preview area and never captures.
@@ -76,6 +81,16 @@ final class PreferencesMenu {
         groupItem.toolTip = "One entry per app, ordered by most recent use — like the system switcher. "
             + "Use the app's own Cmd-` to move between its windows."
         menu.addItem(groupItem)
+
+        let dockClickItem = NSMenuItem(title: "Dock Click Opens Recent Window",
+                                       action: #selector(toggleDockClick(_:)),
+                                       keyEquivalent: "")
+        dockClickItem.target = self
+        dockClickItem.state = Self.dockClickEnabled ? .on : .off
+        dockClickItem.toolTip = "Clicking a running app in the Dock brings forward only its most recent window, "
+            + "like confirming in the switcher, instead of all of its windows. "
+            + "Hold, drag, and modifier clicks still go to the Dock."
+        menu.addItem(dockClickItem)
 
         let styleItem = NSMenuItem(title: "Style", action: nil, keyEquivalent: "")
         let styleMenu = NSMenu()
@@ -242,6 +257,23 @@ final class PreferencesMenu {
             UserDefaults.standard.set(enabling, forKey: AppGrouping.defaultsKey)
         }
         sender.state = enabling ? .on : .off
+    }
+
+    // MARK: - Dock Click
+
+    static var dockClickEnabled: Bool {
+        DockClickSetting.resolve(UserDefaults.standard.object(forKey: DockClickSetting.defaultsKey) as? Bool)
+    }
+
+    @objc private func toggleDockClick(_ sender: NSMenuItem) {
+        let enabling = sender.state == .off
+        if enabling == DockClickSetting.defaultEnabled {
+            UserDefaults.standard.removeObject(forKey: DockClickSetting.defaultsKey)
+        } else {
+            UserDefaults.standard.set(enabling, forKey: DockClickSetting.defaultsKey)
+        }
+        sender.state = enabling ? .on : .off
+        onDockClickChanged?(enabling)
     }
 
     // MARK: - Style

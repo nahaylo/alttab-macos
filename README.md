@@ -60,6 +60,7 @@ If you want extensive customization, use lwouis/alttab. If you want something sm
 - **Option-Tab** to activate, cycle with Tab, confirm on release
 - **Switcher Key** setting: Option (default) or **Command** — Command takes over the system Cmd-Tab app switcher while AltTab runs, no system settings changes needed; while the switcher is open, **Q** quits and **H** hides the selected window's app (native Cmd-Tab convention, works in both modes)
 - **Group by Application** (default on): one entry per app (its most recent window), ordered by latest use — exactly the system switcher's list, but MRU-accurate. Move between an app's windows with its own Cmd-`. Turn it off for one entry per window; **Thumbnails** style brings back the original preview cells
+- **Dock Click Opens Recent Window** (default on): clicking a running app in the Dock brings forward only its most recent window — the same one the switcher would raise — instead of all of its windows. Hold, drag and modifier clicks still go to the Dock
 - **Style**: **Icons** (default) — the native look: app icons at the system switcher's size and spacing, shrinking as the list grows so the whole row fits the screen (down to a floor, then it scrolls), a filled highlight behind the selection, Dock badges (unread counts) on the icons, and the selected app's name beneath it, never truncated. Or **Thumbnails** — the original cells with a window preview or icon, title and app name. Icons style never captures previews, so it never asks for Screen Recording
 - **Shift-Tab** / Arrow keys to navigate in reverse — and **Option-Shift-Tab** opens the switcher already cycling backward, anchored on the least-recently-used window (new in 1.3.2)
 - **Escape** to cancel without switching
@@ -74,7 +75,7 @@ If you want extensive customization, use lwouis/alttab. If you want something sm
 - Menu bar utility — no Dock icon, no clutter
 - Launch at Login support (macOS 13+ SMAppService)
 - Zero dependencies — pure Swift + AppKit
-- ~3,000 lines of code, single-purpose, auditable (121 unit tests on the pure-logic core, run in CI)
+- ~3,000 lines of code, single-purpose, auditable (138 unit tests on the pure-logic core, run in CI)
 
 ## The switcher
 
@@ -118,6 +119,14 @@ AltTab tracks windows, not apps: its order is a most-recently-used list of every
 
 Turn it **off** and every window gets its own entry again, in either style: the list then shows several entries for an app with several windows, each activating that specific window. With Icons style that means repeated icons told apart by the caption (the window title); Thumbnails style shows each window's preview and title.
 
+### Dock click
+
+The Dock does the opposite of the switcher: clicking an app's icon brings *every* window of that app forward. **Dock Click Opens Recent Window** (on by default) makes a Dock click behave like confirming the app in the switcher — only its most recently used window comes forward, un-minimized or pulled in from another Space if needed.
+
+- **What is taken over.** A plain left click, pressed and released quickly, on the Dock icon of a running app that has windows AltTab knows about, when that app isn't already frontmost.
+- **What still goes to the Dock.** Everything else, exactly as before: press-and-hold (the Dock menu), dragging a file onto an icon, <kbd>Cmd</kbd> / <kbd>Option</kbd> / <kbd>Control</kbd> / <kbd>Shift</kbd> clicks, right clicks, folders, the Trash, apps that aren't running or have no windows (the Dock launches or reopens them), and clicks on the frontmost app — so the Dock's own "Minimize windows on application icon click" setting keeps working.
+- **How.** A second event tap, active only while the setting is on and only for mouse events, holds the press while the Dock's Accessibility tree is asked what sits under the pointer (off the main thread); a quick release raises the window, anything else replays the held events to the Dock. If the Dock takes longer than 300 ms to answer, the click is handed back and behaves natively — a click is never lost. No extra permission: the Accessibility grant AltTab already has covers the Dock.
+
 ## Settings
 
 Everything lives in the menu bar item; there is no preferences window. Changes apply to the next invocation, no relaunch.
@@ -133,6 +142,7 @@ Everything lives in the menu bar item; there is no preferences window. Changes a
 | **Launch at Login** | Registers AltTab as a login item (macOS 13+ `SMAppService`). | off |
 | **Switcher Key** | **Option** keeps the system Cmd-Tab untouched. **Command** makes Cmd-Tab open AltTab instead of the system app switcher — the event tap swallows the keystroke before the Dock sees it, so nothing changes in System Settings and the system switcher is back the moment AltTab quits. | Option |
 | **Group by Application** | One entry per app (its most recent window) instead of one per window. | on |
+| **Dock Click Opens Recent Window** | A plain click on a running app's Dock icon raises only its most recent window, like the switcher does, instead of all of its windows. Hold, drag, modifier clicks, the frontmost app and apps without windows go to the Dock as usual. | on |
 | **Style** | **Icons** — the native look described above — or **Thumbnails**, the original window cells. | Icons |
 | **Appearance** | Panel theme: follow the **System**, or force **Light** / **Dark**. | System |
 | **Background** | **System** draws what the Dock's switcher uses on your OS: Liquid Glass at Apple's default on macOS 26+, the translucent HUD material before — so Appearance and Accessibility settings (Reduce Transparency, tinted vs. clear glass) apply as-is. **Solid** is an opaque plate with WCAG AA-tested label contrast, **Transparent** the classic HUD, **Liquid Glass** an explicit glass you can tune. | System |

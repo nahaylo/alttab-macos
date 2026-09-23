@@ -8,6 +8,8 @@
 //  Accessibility permission the event tap already needs covers this read.
 //  The walk is synchronous AX IPC, so it runs on a private queue and delivers
 //  on the main thread; DockBadges (pure, unit-tested) matches items to pids.
+//  Also answers which application item sits under a screen point for the
+//  Dock click interceptor (same tree, same queue).
 //
 //  Author:  Sergio Farfan <sergio.farfan@gmail.com>
 //  License: MIT
@@ -40,7 +42,38 @@ final class DockBadgeReader {
         }
     }
 
+    /// The application item under `point` (global top-left coordinates, as a
+    /// CGEvent reports them), read off the main thread; `completion` runs on
+    /// the main thread with nil when the point is not on an app's Dock item
+    /// (a folder, the separator, the Trash, empty strip) or the Dock is
+    /// unreachable.
+    func item(at point: CGPoint, completion: @escaping (DockBadges.Item?) -> Void) {
+        guard let dock = NSRunningApplication.runningApplications(withBundleIdentifier: Self.dockBundleID).first else {
+            completion(nil)
+            return
+        }
+        let dockPID = dock.processIdentifier
+        Self.queue.async {
+            let item = Self.readItem(at: point, dockPID: dockPID)
+            DispatchQueue.main.async { completion(item) }
+        }
+    }
+
     // MARK: - AX walk (background queue)
+
+    private static func readItem(at point: CGPoint, dockPID: pid_t) -> DockBadges.Item? {
+        let axDock = AXUIElementCreateApplication(dockPID)
+        AXUIElementSetMessagingTimeout(axDock, axTimeout)
+        var elementRef: AXUIElement?
+        guard AXUIElementCopyElementAtPosition(axDock, Float(point.x), Float(point.y), &elementRef) == .success,
+              let element = elementRef else { return nil }
+        AXUIElementSetMessagingTimeout(element, axTimeout)
+        guard (copy(element, kAXSubroleAttribute) as? String) == applicationDockItemSubrole else { return nil }
+        let title = copy(element, kAXTitleAttribute) as? String ?? ""
+        let url = copy(element, kAXURLAttribute) as? NSURL
+        let badge = copy(element, statusLabelAttribute) as? String
+        return DockBadges.Item(bundlePath: url?.path, title: title, badge: badge)
+    }
 
     private static func readItems(dockPID: pid_t) -> [DockBadges.Item] {
         let axDock = AXUIElementCreateApplication(dockPID)

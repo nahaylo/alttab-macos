@@ -5,6 +5,12 @@ All notable changes to AltTab will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.1] - 2026-09-23
+
+### Added
+
+- **Dock Click Opens Recent Window** (status menu, **on by default**): a plain click on a running app's Dock icon brings forward only that app's most recently used window — the same window confirming its switcher entry raises — instead of the Dock's default of bringing every window of the app forward. A second, mouse-only event tap (installed only while the setting is on — turn it off in the status menu and no mouse event passes through AltTab) swallows the press before the Dock sees it, hit-tests the Dock's Accessibility tree off the main thread and raises the window through the existing activator. Anything that is not a quick plain click on a running app with known windows is handed back to the Dock untouched by replaying the held events: press-and-hold (Dock menu), drags (drop onto an icon), Command / Option / Control / Shift clicks, the Trash and folders, apps that aren't running or have no windows (the Dock launches / reopens them), and the frontmost app (so "Minimize windows on application icon click" keeps working). A slow Dock degrades to its own behaviour after 300 ms rather than losing the click. The press → release gesture and the raise policy are pure types (`DockClickGesture`, `DockClickPolicy`, unit-tested).
+
 ## [1.4.0] - 2026-09-23
 
 ### Added
@@ -172,6 +178,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Build/install script with `--system` flag for /Applications
 - Shift-Tab, Arrow keys, Escape, Enter, and mouse click navigation
 
+[1.4.1]: https://github.com/sergio-farfan/alttab-macos/releases/tag/v1.4.1
 [1.4.0]: https://github.com/sergio-farfan/alttab-macos/releases/tag/v1.4.0
 [1.3.4]: https://github.com/sergio-farfan/alttab-macos/releases/tag/v1.3.4
 [1.3.3]: https://github.com/sergio-farfan/alttab-macos/releases/tag/v1.3.3
