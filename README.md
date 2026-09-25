@@ -75,7 +75,7 @@ If you want extensive customization, use lwouis/alttab. If you want something sm
 - Menu bar utility — no Dock icon, no clutter
 - Launch at Login support (macOS 13+ SMAppService)
 - Zero dependencies — pure Swift + AppKit
-- ~3,000 lines of code, single-purpose, auditable (138 unit tests on the pure-logic core, run in CI)
+- ~3,000 lines of code, single-purpose, auditable (146 unit tests on the pure-logic core, run in CI)
 
 ## The switcher
 

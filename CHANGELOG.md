@@ -5,6 +5,12 @@ All notable changes to AltTab will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.2] - 2026-09-25
+
+### Fixed
+
+- **An app could drop to the end of the switcher after you used it** — most visibly Terminal: type in a tab, switch away, and Terminal showed up last instead of as the previous app. Terminal keeps every tab as its own window and can move a tab to a new window ID; the recency order was kept per window ID only, so a replaced window (or one missed by a single background refresh) came back as a stranger at the tail. The order now also ranks apps, and a window it has not seen before takes its app's place — after that app's other windows, ahead of every app used less recently. Windows of apps never seen before still start at the end. Pure `MRUOrder` change, unit-tested.
+
 ## [1.4.1] - 2026-09-23
 
 ### Added
@@ -178,6 +184,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Build/install script with `--system` flag for /Applications
 - Shift-Tab, Arrow keys, Escape, Enter, and mouse click navigation
 
+[1.4.2]: https://github.com/sergio-farfan/alttab-macos/releases/tag/v1.4.2
 [1.4.1]: https://github.com/sergio-farfan/alttab-macos/releases/tag/v1.4.1
 [1.4.0]: https://github.com/sergio-farfan/alttab-macos/releases/tag/v1.4.0
 [1.3.4]: https://github.com/sergio-farfan/alttab-macos/releases/tag/v1.3.4

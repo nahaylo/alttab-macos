@@ -311,7 +311,7 @@ final class WindowModel {
                                                id: { $0.windowID },
                                                ownerPID: { $0.ownerPID })
                 self.cachedWindows = merged
-                self.mru.sync(with: merged.map { $0.windowID })
+                self.mru.sync(windows: merged.map { (id: $0.windowID, pid: $0.ownerPID) })
                 completion(self.mru.sorted(merged) { $0.windowID })
             }
         }
@@ -535,7 +535,7 @@ final class WindowModel {
     /// kAXFocusedWindow before the off-main AX raise lands).
     func noteExplicitActivation(pid: pid_t, windowID: CGWindowID) {
         focusEpoch += 1
-        mru.promoteToFront(windowID)
+        mru.promoteToFront(windowID, pid: pid)
         pendingActivation = (pid: pid, windowID: windowID, at: Date())
         // A same-app switch fires no didActivateApplication, and the app's
         // AXObserver may be dead — schedule the refresh here so every explicit
@@ -546,13 +546,14 @@ final class WindowModel {
     private func seedMRUFromStackingOrder() {
         guard let infoList = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements],
                                                         kCGNullWindowID) as? [[String: Any]] else { return }
-        mru.seed(infoList.compactMap { info -> CGWindowID? in
+        mru.seed(windows: infoList.compactMap { info -> (id: CGWindowID, pid: pid_t)? in
             guard let id = info[kCGWindowNumber as String] as? CGWindowID,
+                  let pid = info[kCGWindowOwnerPID as String] as? pid_t,
                   let layer = info[kCGWindowLayer as String] as? Int, layer == 0,
                   let bounds = info[kCGWindowBounds as String] as? [String: CGFloat],
                   let w = bounds["Width"], let h = bounds["Height"],
                   w > 0 && h > 0 else { return nil }
-            return id
+            return (id: id, pid: pid)
         })
     }
 
@@ -580,7 +581,7 @@ final class WindowModel {
         if let pending = pendingActivation, pending.pid == pid {
             pendingActivation = nil
             if Date().timeIntervalSince(pending.at) < Self.pendingActivationWindow {
-                mru.promoteToFront(pending.windowID)
+                mru.promoteToFront(pending.windowID, pid: pending.pid)
                 return
             }
         } else if pendingActivation != nil {
@@ -614,7 +615,7 @@ final class WindowModel {
             guard windowID != 0 else { return }
             DispatchQueue.main.async {
                 guard let self = self, self.focusEpoch == epoch else { return }
-                self.mru.promoteToFront(windowID)
+                self.mru.promoteToFront(windowID, pid: pid)
             }
         }
     }
@@ -707,7 +708,7 @@ final class WindowModel {
                 pendingActivation = nil
             }
             focusEpoch += 1
-            mru.promoteToFront(windowID)
+            mru.promoteToFront(windowID, pid: pid)
             scheduleCacheRefresh()
         }
     }
@@ -736,6 +737,7 @@ final class WindowModel {
                            object: nil, queue: .main) { [weak self] notification in
             guard let app = notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication else { return }
             self?.removeAXObserver(for: app.processIdentifier)
+            self?.mru.forgetApp(app.processIdentifier)
             AppIconCache.shared.evict(pid: app.processIdentifier)
             // Prune the quit app's windows from the cache before the next invoke.
             self?.scheduleCacheRefresh()
