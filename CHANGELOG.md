@@ -5,6 +5,43 @@ All notable changes to AltTab will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.2] - 2026-09-25
+
+### Fixed
+
+- **An app could drop to the end of the switcher after you used it** — most visibly Terminal: type in a tab, switch away, and Terminal showed up last instead of as the previous app. Terminal keeps every tab as its own window and can move a tab to a new window ID; the recency order was kept per window ID only, so a replaced window (or one missed by a single background refresh) came back as a stranger at the tail. The order now also ranks apps, and a window it has not seen before takes its app's place — after that app's other windows, ahead of every app used less recently. Windows of apps never seen before still start at the end. Pure `MRUOrder` change, unit-tested.
+
+## [1.4.1] - 2026-09-23
+
+### Added
+
+- **Dock Click Opens Recent Window** (status menu, **on by default**): a plain click on a running app's Dock icon brings forward only that app's most recently used window — the same window confirming its switcher entry raises — instead of the Dock's default of bringing every window of the app forward. A second, mouse-only event tap (installed only while the setting is on — turn it off in the status menu and no mouse event passes through AltTab) swallows the press before the Dock sees it, hit-tests the Dock's Accessibility tree off the main thread and raises the window through the existing activator. Anything that is not a quick plain click on a running app with known windows is handed back to the Dock untouched by replaying the held events: press-and-hold (Dock menu), drags (drop onto an icon), Command / Option / Control / Shift clicks, the Trash and folders, apps that aren't running or have no windows (the Dock launches / reopens them), and the frontmost app (so "Minimize windows on application icon click" keeps working). A slow Dock degrades to its own behaviour after 300 ms rather than losing the click. The press → release gesture and the raise policy are pure types (`DockClickGesture`, `DockClickPolicy`, unit-tested).
+
+## [1.4.0] - 2026-09-23
+
+### Added
+
+- **Group by Application** (status menu, **on by default**): the list collapses to one entry per app — its most recently used window — so it reads as apps ordered by latest use, like the system switcher. Confirming activates that window; Q/H act on the app. The first-Tab anchor maps the focused window onto its app's entry, so a stale cache can't make the first Tab re-select the current app. Pure `AppGrouping` (unit-tested).
+- **Style** (status menu): **Icons** (**default**) or **Thumbnails** (the existing cell) — Icons is the native Cmd-Tab look: app icons sized to fit — 128pt for a few items, shrinking as the list grows so the whole panel fits 85% of the screen width, down to a 48pt floor past which the strip scrolls — with the highlight, gaps, side padding and panel corners all proportional to the icon as in the native switcher (pure `CellMetrics`, unit-tested) — a filled rounded highlight behind the selection instead of a border, and the selected item's name floating beneath it at panel level (app name when grouped, window title otherwise) — sized to the text and clamped to the panel, so it is never truncated to the cell width. Icons style never starts a preview capture, so it never touches Screen Recording; "Show Window Previews" is greyed out under it. Cell geometry lives in the pure `SwitcherStyle` type (unit-tested).
+- **Dock badges** in Icons style: each icon shows its app's Dock badge (unread count or dot) at the top-right corner like the native switcher. Read once per invocation from the Dock's Accessibility tree (its items expose the badge as `AXStatusLabel`) off the main thread — no extra permission, the Accessibility grant already covers it; the pure `DockBadges` matcher (bundle path, then title) is unit-tested.
+- **Background → System**: draws what the Dock's own app switcher uses on the running OS — regular Liquid Glass on macOS 26+, the translucent HUD material before. Glass Strength is greyed out under it (the system look fixes the strength); an explicit Liquid Glass choice keeps honoring it.
+
+### Changed
+
+- **New defaults**: Group by Application on, Style Icons, Background System — out of the box the switcher now looks and lists like the built-in Cmd-Tab (Switcher Key stays Option by default; set it to Command to replace the system switcher). Anyone who never changed these settings gets the new look; an explicit choice is kept. Solid, the WCAG AA-tested background, is still one click away.
+
+## [1.3.4] - 2026-09-23
+
+### Added
+
+- **Switcher Key** (status menu): Option (default) or **Command**. Command makes Cmd-Tab open AltTab's window switcher in place of the system app switcher — the session-level event tap swallows the Cmd-Tab keyDown before the Dock sees it, so no Keyboard Shortcuts changes are needed. Applies to the next keypress, no relaunch. The choice lives in the pure `SwitcherModifier` type (unit-tested).
+- **Q / H while the switcher is open** quit or hide the selected window's app and keep the switcher up (native Cmd-Tab convention; both modifier modes). A quit app's windows leave the list immediately.
+
+### Changed
+
+- **CI runs the unit tests**: `swift test` now gates the release workflow (before anything is built) and runs on every push and pull request via the new `tests.yml`. Until now the suite was only ever compiled, never executed in CI.
+- While a switcher session is active, **every other keyDown is swallowed** (previously passed through). The modifier is still held, so a leaked key would reach the frontmost app as a chord — with Command as the modifier that was a fumbled Cmd-Q/Cmd-W on the wrong window.
+
 ## [1.3.3] - 2026-09-19
 
 ### Added
@@ -147,6 +184,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Build/install script with `--system` flag for /Applications
 - Shift-Tab, Arrow keys, Escape, Enter, and mouse click navigation
 
+[1.4.2]: https://github.com/sergio-farfan/alttab-macos/releases/tag/v1.4.2
+[1.4.1]: https://github.com/sergio-farfan/alttab-macos/releases/tag/v1.4.1
+[1.4.0]: https://github.com/sergio-farfan/alttab-macos/releases/tag/v1.4.0
+[1.3.4]: https://github.com/sergio-farfan/alttab-macos/releases/tag/v1.3.4
 [1.3.3]: https://github.com/sergio-farfan/alttab-macos/releases/tag/v1.3.3
 [1.3.2]: https://github.com/sergio-farfan/alttab-macos/releases/tag/v1.3.2
 [1.3.1]: https://github.com/sergio-farfan/alttab-macos/releases/tag/v1.3.1

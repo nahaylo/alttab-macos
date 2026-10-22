@@ -3,10 +3,15 @@
 //  AltTab — Windows-style Window Switcher for macOS
 //
 //  Status bar dropdown menu with "Launch at Login" toggle (via SMAppService
-//  on macOS 13+), "Appearance" submenu (System / Light / Dark switcher
-//  theme override), "Background" submenu (Solid / Transparent / Liquid
+//  on macOS 13+), "Switcher Key" submenu (Option / Command — Command
+//  replaces the system app switcher), "Group by Application" toggle (one
+//  entry per app, like the system switcher), "Dock Click Opens Recent
+//  Window" toggle (a Dock click raises one window, like the switcher),
+//  "Style" submenu (Thumbnails / Icons), "Appearance" submenu (System / Light / Dark switcher theme
+//  override), "Background" submenu (System / Solid / Transparent / Liquid
 //  Glass on macOS 26+), "Show Window Previews" toggle (ScreenCaptureKit
-//  previews, macOS 14+, requires Screen Recording), About dialog, and Quit.
+//  previews, macOS 14+, requires Screen Recording; Thumbnails style only),
+//  About dialog, and Quit.
 //  Attached to the NSStatusItem created by AppDelegate.
 //
 //  Author:  Sergio Farfan <sergio.farfan@gmail.com>
@@ -26,6 +31,18 @@ final class PreferencesMenu {
     /// Background is Liquid Glass, which is the only style it affects.
     private var glassStrengthItem: NSMenuItem?
 
+    /// Called on the main thread when the user picks a different Switcher
+    /// Key; AppDelegate forwards it to HotkeyManager so it applies at once.
+    var onModifierChanged: ((SwitcherModifier) -> Void)?
+
+    /// Called on the main thread when the user toggles "Dock Click Opens
+    /// Recent Window"; AppDelegate starts or stops the Dock click tap.
+    var onDockClickChanged: ((Bool) -> Void)?
+
+    /// "Show Window Previews" — greyed out in Icons style, which has no
+    /// preview area and never captures.
+    private var previewsItem: NSMenuItem?
+
     init() {
         menu = NSMenu()
         // Manual enablement so the Glass Strength parent can be greyed out;
@@ -38,6 +55,56 @@ final class PreferencesMenu {
         launchItem.target = self
         launchItem.state = Self.isLaunchAtLoginEnabled ? .on : .off
         menu.addItem(launchItem)
+
+        let modifierItem = NSMenuItem(title: "Switcher Key", action: nil, keyEquivalent: "")
+        let modifierMenu = NSMenu()
+        for modifier in SwitcherModifier.allCases {
+            let item = NSMenuItem(title: modifier.title,
+                                  action: #selector(selectModifier(_:)),
+                                  keyEquivalent: "")
+            item.target = self
+            item.representedObject = modifier.rawValue
+            if modifier == .command {
+                item.toolTip = "Replaces the system Cmd-Tab app switcher while AltTab is running."
+            }
+            modifierMenu.addItem(item)
+        }
+        modifierItem.submenu = modifierMenu
+        menu.addItem(modifierItem)
+        refreshModifierChecks(in: modifierMenu)
+
+        let groupItem = NSMenuItem(title: "Group by Application",
+                                   action: #selector(toggleGroupByApplication(_:)),
+                                   keyEquivalent: "")
+        groupItem.target = self
+        groupItem.state = Self.groupByApplication ? .on : .off
+        groupItem.toolTip = "One entry per app, ordered by most recent use — like the system switcher. "
+            + "Use the app's own Cmd-` to move between its windows."
+        menu.addItem(groupItem)
+
+        let dockClickItem = NSMenuItem(title: "Dock Click Opens Recent Window",
+                                       action: #selector(toggleDockClick(_:)),
+                                       keyEquivalent: "")
+        dockClickItem.target = self
+        dockClickItem.state = Self.dockClickEnabled ? .on : .off
+        dockClickItem.toolTip = "Clicking a running app in the Dock brings forward only its most recent window, "
+            + "like confirming in the switcher, instead of all of its windows. "
+            + "Hold, drag, and modifier clicks still go to the Dock."
+        menu.addItem(dockClickItem)
+
+        let styleItem = NSMenuItem(title: "Style", action: nil, keyEquivalent: "")
+        let styleMenu = NSMenu()
+        for style in SwitcherStyle.allCases {
+            let item = NSMenuItem(title: style.title,
+                                  action: #selector(selectStyle(_:)),
+                                  keyEquivalent: "")
+            item.target = self
+            item.representedObject = style.rawValue
+            styleMenu.addItem(item)
+        }
+        styleItem.submenu = styleMenu
+        menu.addItem(styleItem)
+        refreshStyleChecks(in: styleMenu)
 
         let appearanceItem = NSMenuItem(title: "Appearance", action: nil, keyEquivalent: "")
         let appearanceMenu = NSMenu()
@@ -55,7 +122,7 @@ final class PreferencesMenu {
 
         let backgroundItem = NSMenuItem(title: "Background", action: nil, keyEquivalent: "")
         let backgroundMenu = NSMenu()
-        var backgroundChoices = [("Solid", "solid"), ("Transparent", "transparent")]
+        var backgroundChoices = [("System", "system"), ("Solid", "solid"), ("Transparent", "transparent")]
         if #available(macOS 26.0, *) {
             backgroundChoices.append(("Liquid Glass", "glass"))
         }
@@ -65,6 +132,10 @@ final class PreferencesMenu {
                                   keyEquivalent: "")
             item.target = self
             item.representedObject = value
+            if value == "system" {
+                item.toolTip = "Match the system app switcher: Liquid Glass on macOS 26 and later, "
+                    + "the translucent HUD material before."
+            }
             backgroundMenu.addItem(item)
         }
         backgroundItem.submenu = backgroundMenu
@@ -96,6 +167,8 @@ final class PreferencesMenu {
             previewsItem.target = self
             previewsItem.state = WindowCapture.previewsEnabled ? .on : .off
             menu.addItem(previewsItem)
+            self.previewsItem = previewsItem
+            updatePreviewsEnabled()
         }
 
         menu.addItem(NSMenuItem.separator())
@@ -143,6 +216,97 @@ final class PreferencesMenu {
         }
     }
 
+    // MARK: - Switcher Key
+
+    /// The stored choice; absent means the default (Option).
+    static var currentModifier: SwitcherModifier {
+        SwitcherModifier.resolve(UserDefaults.standard.string(forKey: SwitcherModifier.defaultsKey))
+    }
+
+    @objc private func selectModifier(_ sender: NSMenuItem) {
+        let modifier = SwitcherModifier.resolve(sender.representedObject as? String)
+        if modifier == SwitcherModifier.defaultModifier {
+            UserDefaults.standard.removeObject(forKey: SwitcherModifier.defaultsKey)
+        } else {
+            UserDefaults.standard.set(modifier.rawValue, forKey: SwitcherModifier.defaultsKey)
+        }
+        if let menu = sender.menu {
+            refreshModifierChecks(in: menu)
+        }
+        onModifierChanged?(modifier)
+    }
+
+    private func refreshModifierChecks(in menu: NSMenu) {
+        let current = Self.currentModifier
+        for item in menu.items {
+            item.state = ((item.representedObject as? String) == current.rawValue) ? .on : .off
+        }
+    }
+
+    // MARK: - Group by Application
+
+    static var groupByApplication: Bool {
+        AppGrouping.resolve(UserDefaults.standard.object(forKey: AppGrouping.defaultsKey) as? Bool)
+    }
+
+    @objc private func toggleGroupByApplication(_ sender: NSMenuItem) {
+        let enabling = sender.state == .off
+        if enabling == AppGrouping.defaultEnabled {
+            UserDefaults.standard.removeObject(forKey: AppGrouping.defaultsKey)
+        } else {
+            UserDefaults.standard.set(enabling, forKey: AppGrouping.defaultsKey)
+        }
+        sender.state = enabling ? .on : .off
+    }
+
+    // MARK: - Dock Click
+
+    static var dockClickEnabled: Bool {
+        DockClickSetting.resolve(UserDefaults.standard.object(forKey: DockClickSetting.defaultsKey) as? Bool)
+    }
+
+    @objc private func toggleDockClick(_ sender: NSMenuItem) {
+        let enabling = sender.state == .off
+        if enabling == DockClickSetting.defaultEnabled {
+            UserDefaults.standard.removeObject(forKey: DockClickSetting.defaultsKey)
+        } else {
+            UserDefaults.standard.set(enabling, forKey: DockClickSetting.defaultsKey)
+        }
+        sender.state = enabling ? .on : .off
+        onDockClickChanged?(enabling)
+    }
+
+    // MARK: - Style
+
+    static var currentStyle: SwitcherStyle {
+        SwitcherStyle.resolve(UserDefaults.standard.string(forKey: SwitcherStyle.defaultsKey))
+    }
+
+    @objc private func selectStyle(_ sender: NSMenuItem) {
+        let style = SwitcherStyle.resolve(sender.representedObject as? String)
+        if style == SwitcherStyle.defaultStyle {
+            UserDefaults.standard.removeObject(forKey: SwitcherStyle.defaultsKey)
+        } else {
+            UserDefaults.standard.set(style.rawValue, forKey: SwitcherStyle.defaultsKey)
+        }
+        if let menu = sender.menu {
+            refreshStyleChecks(in: menu)
+        }
+        updatePreviewsEnabled()
+    }
+
+    private func refreshStyleChecks(in menu: NSMenu) {
+        let current = Self.currentStyle
+        for item in menu.items {
+            item.state = ((item.representedObject as? String) == current.rawValue) ? .on : .off
+        }
+    }
+
+    /// Previews only exist in Thumbnails style.
+    private func updatePreviewsEnabled() {
+        previewsItem?.isEnabled = Self.currentStyle.showsPreviews
+    }
+
     // MARK: - Appearance
 
     @objc private func selectAppearance(_ sender: NSMenuItem) {
@@ -167,8 +331,8 @@ final class PreferencesMenu {
     // MARK: - Background
 
     @objc private func selectBackground(_ sender: NSMenuItem) {
-        let value = sender.representedObject as? String ?? "solid"
-        if value == "solid" {
+        let value = sender.representedObject as? String ?? SwitcherPanel.defaultBackground
+        if value == SwitcherPanel.defaultBackground {
             UserDefaults.standard.removeObject(forKey: SwitcherPanel.backgroundDefaultsKey)
         } else {
             UserDefaults.standard.set(value, forKey: SwitcherPanel.backgroundDefaultsKey)
@@ -180,7 +344,7 @@ final class PreferencesMenu {
     }
 
     private func refreshBackgroundChecks(in menu: NSMenu) {
-        let current = UserDefaults.standard.string(forKey: SwitcherPanel.backgroundDefaultsKey) ?? "solid"
+        let current = UserDefaults.standard.string(forKey: SwitcherPanel.backgroundDefaultsKey) ?? SwitcherPanel.defaultBackground
         for item in menu.items {
             item.state = ((item.representedObject as? String) == current) ? .on : .off
         }
@@ -207,7 +371,8 @@ final class PreferencesMenu {
         }
     }
 
-    /// Strength only applies to the Liquid Glass background.
+    /// Strength only applies to an explicit Liquid Glass background — under
+    /// System the OS look fixes it, so the submenu is greyed out.
     private func updateGlassStrengthEnabled() {
         glassStrengthItem?.isEnabled =
             UserDefaults.standard.string(forKey: SwitcherPanel.backgroundDefaultsKey) == "glass"
