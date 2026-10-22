@@ -69,6 +69,28 @@ final class DockClickTests: XCTestCase {
         XCTAssertEqual(raise(item("/Applications/Safari.app", "Safari")), Win(id: 11, pid: 10))
     }
 
+    private struct MWin: Equatable {
+        let id: CGWindowID
+        let pid: pid_t
+        let minimized: Bool
+    }
+
+    private func raiseMinimizable(_ windows: [MWin]) -> MWin? {
+        DockClickPolicy.windowToRaise(item: item("/Applications/Safari.app", "Safari"), apps: apps, frontmostPID: 99,
+                                      windows: windows, ownerPID: { $0.pid }, isMinimized: { $0.minimized })
+    }
+
+    func testRaisesTheMostRecentVisibleWindowOverAMinimizedOne() {
+        let windows = [MWin(id: 11, pid: 10, minimized: true), MWin(id: 21, pid: 20, minimized: false),
+                       MWin(id: 12, pid: 10, minimized: false)]
+        XCTAssertEqual(raiseMinimizable(windows), MWin(id: 12, pid: 10, minimized: false))
+    }
+
+    func testUnminimizesTheMostRecentWindowWhenAllAreMinimized() {
+        let windows = [MWin(id: 11, pid: 10, minimized: true), MWin(id: 12, pid: 10, minimized: true)]
+        XCTAssertEqual(raiseMinimizable(windows), MWin(id: 11, pid: 10, minimized: true))
+    }
+
     func testLeavesTheClickToTheDockWhenNothingToRaise() {
         // Not an app item.
         XCTAssertNil(raise(nil))

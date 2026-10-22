@@ -258,12 +258,32 @@ enum AppGrouping {
         stored ?? defaultEnabled
     }
 
-    /// Keeps the first item per owner pid, preserving order. Fed an MRU-sorted
-    /// list, the survivor for each app is its most recently used window and
-    /// the apps come out ordered by latest use.
-    static func collapse<T>(_ items: [T], ownerPID: (T) -> pid_t) -> [T] {
-        var seen = Set<pid_t>()
-        return items.filter { seen.insert(ownerPID($0)).inserted }
+    /// One item per owner pid, apps in order of their first item. Fed an
+    /// MRU-sorted list, the apps come out ordered by latest use and each is
+    /// represented by its most recent VISIBLE window: a minimized window
+    /// stands for its app only when all of the app's windows are minimized.
+    /// Otherwise a minimized window ranked first would grey the app's icon
+    /// and confirming would un-minimize it instead of raising the window the
+    /// user can see — the system switcher leaves minimized windows alone.
+    static func collapse<T>(_ items: [T], ownerPID: (T) -> pid_t,
+                            isMinimized: (T) -> Bool = { _ in false }) -> [T] {
+        var slot: [pid_t: Int] = [:]
+        var picked: [T] = []
+        var pickedIsMinimized: [Bool] = []
+        for item in items {
+            let pid = ownerPID(item)
+            if let index = slot[pid] {
+                if pickedIsMinimized[index] && !isMinimized(item) {
+                    picked[index] = item
+                    pickedIsMinimized[index] = false
+                }
+            } else {
+                slot[pid] = picked.count
+                picked.append(item)
+                pickedIsMinimized.append(isMinimized(item))
+            }
+        }
+        return picked
     }
 
     /// The grouped list's stand-in for `windowID`: the representative of the

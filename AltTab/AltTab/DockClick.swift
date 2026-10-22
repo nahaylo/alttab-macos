@@ -69,16 +69,20 @@ enum DockClickPolicy {
 
     /// The window a plain click on `item` should raise, or nil to let the Dock
     /// handle the click. `windows` is the MRU-ordered list (most recent
-    /// first), so the first window of the matched app is its most recent one.
+    /// first): the app's most recent visible window wins, and a minimized one
+    /// only when every window of the app is minimized (the same rule as
+    /// `AppGrouping.collapse`).
     /// Nil when the item is not a running app we know windows for, or when the
     /// app is already frontmost — the Dock then does nothing or minimizes
     /// (the "Minimize windows on application icon click" Dock setting), and
     /// both must keep working.
     static func windowToRaise<W>(item: DockBadges.Item?, apps: [DockBadges.App], frontmostPID: pid_t?,
-                                 windows: [W], ownerPID: (W) -> pid_t) -> W? {
+                                 windows: [W], ownerPID: (W) -> pid_t,
+                                 isMinimized: (W) -> Bool = { _ in false }) -> W? {
         guard let item = item, let pid = pid(for: item, in: apps) else { return nil }
         guard pid != frontmostPID else { return nil }
-        return windows.first { ownerPID($0) == pid }
+        let own = windows.filter { ownerPID($0) == pid }
+        return own.first { !isMinimized($0) } ?? own.first
     }
 
     /// Fallback Dock hit region when the event carries no window under the

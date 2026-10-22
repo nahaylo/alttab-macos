@@ -134,10 +134,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, HotkeyDelegate {
             let cached = self.windowModel.windowsFromCache()
             guard let first = DockClickPolicy.windowToRaise(item: item, apps: apps,
                                                             frontmostPID: NSWorkspace.shared.frontmostApplication?.processIdentifier,
-                                                            windows: cached, ownerPID: { $0.ownerPID }) else { return nil }
+                                                            windows: cached, ownerPID: { $0.ownerPID },
+                                                            isMinimized: { $0.isMinimized }) else { return nil }
             let candidates = cached.filter { $0.ownerPID == first.ownerPID }
             let live = WindowActivator.liveWindowIDs(candidates.map { $0.windowID })
-            return candidates.first { live.contains($0.windowID) }
+            let liveCandidates = candidates.filter { live.contains($0.windowID) }
+            return liveCandidates.first { !$0.isMinimized } ?? liveCandidates.first
         }
         dockClickInterceptor.onActivate = { [weak self] window in
             NSLog("AltTab: Dock click → raising %@ (pid %d) only", window.windowTitle, window.ownerPID)
@@ -363,10 +365,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, HotkeyDelegate {
     // MARK: - Presentation policy
 
     /// Applies "Group by Application" to an MRU-sorted list: one entry per
-    /// app, its most recent window. Identity when the toggle is off.
+    /// app, its most recent visible window (minimized only when all are).
+    /// Identity when the toggle is off.
     private static func presented(_ windows: [WindowInfo]) -> [WindowInfo] {
         guard PreferencesMenu.groupByApplication else { return windows }
-        return AppGrouping.collapse(windows) { $0.ownerPID }
+        return AppGrouping.collapse(windows, ownerPID: { $0.ownerPID }, isMinimized: { $0.isMinimized })
     }
 
     /// The selection anchor for a presented list: the focused window itself

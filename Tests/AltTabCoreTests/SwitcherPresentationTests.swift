@@ -178,6 +178,52 @@ final class SwitcherPresentationTests: XCTestCase {
         XCTAssertTrue(AppGrouping.collapse([Win]()) { $0.pid }.isEmpty)
     }
 
+    private struct MWin: Equatable {
+        let id: CGWindowID
+        let pid: pid_t
+        let minimized: Bool
+    }
+
+    private func collapse(_ windows: [MWin]) -> [MWin] {
+        AppGrouping.collapse(windows, ownerPID: { $0.pid }, isMinimized: { $0.minimized })
+    }
+
+    /// The reported bug: Safari's minimized window ranked first, so it stood
+    /// for Safari — a greyed icon, and confirming un-minimized it instead of
+    /// raising the window on screen.
+    func testCollapsePrefersTheMostRecentVisibleWindow() {
+        let windows = [MWin(id: 1, pid: 10, minimized: true),   // Safari, minimized
+                       MWin(id: 2, pid: 20, minimized: false),  // Code
+                       MWin(id: 3, pid: 10, minimized: false),  // Safari, visible
+                       MWin(id: 4, pid: 10, minimized: false)]  // Safari, visible, older
+        XCTAssertEqual(collapse(windows), [MWin(id: 3, pid: 10, minimized: false),
+                                           MWin(id: 2, pid: 20, minimized: false)])
+    }
+
+    func testCollapseKeepsTheAppsPlaceWhenSwappingInAVisibleWindow() {
+        // Safari still ranks first as an app: its minimized window was its most recent.
+        let windows = [MWin(id: 1, pid: 10, minimized: true),
+                       MWin(id: 2, pid: 20, minimized: false),
+                       MWin(id: 3, pid: 10, minimized: false)]
+        XCTAssertEqual(collapse(windows).map { $0.pid }, [10, 20])
+    }
+
+    func testCollapseUsesAMinimizedWindowOnlyWhenAllAreMinimized() {
+        let windows = [MWin(id: 1, pid: 10, minimized: true),
+                       MWin(id: 2, pid: 10, minimized: true),
+                       MWin(id: 3, pid: 20, minimized: false)]
+        XCTAssertEqual(collapse(windows), [MWin(id: 1, pid: 10, minimized: true),
+                                           MWin(id: 3, pid: 20, minimized: false)])
+    }
+
+    func testAnchorMapsAMinimizedFocusOntoTheVisibleRepresentative() {
+        let full = [MWin(id: 1, pid: 10, minimized: true), MWin(id: 3, pid: 10, minimized: false),
+                    MWin(id: 2, pid: 20, minimized: false)]
+        let grouped = collapse(full)
+        XCTAssertEqual(AppGrouping.representative(of: 1, in: grouped, full: full,
+                                                  id: { $0.id }, ownerPID: { $0.pid }), 3)
+    }
+
     // MARK: - DockBadges
 
     private let dockItems = [

@@ -59,7 +59,7 @@ If you want extensive customization, use lwouis/alttab. If you want something sm
 
 - **Option-Tab** to activate, cycle with Tab, confirm on release
 - **Switcher Key** setting: Option (default) or **Command** — Command takes over the system Cmd-Tab app switcher while AltTab runs, no system settings changes needed; while the switcher is open, **Q** quits and **H** hides the selected window's app (native Cmd-Tab convention, works in both modes)
-- **Group by Application** (default on): one entry per app (its most recent window), ordered by latest use — exactly the system switcher's list, but MRU-accurate. Move between an app's windows with its own Cmd-`. Turn it off for one entry per window; **Thumbnails** style brings back the original preview cells
+- **Group by Application** (default on): one entry per app (its most recent visible window), ordered by latest use — exactly the system switcher's list, but MRU-accurate. Move between an app's windows with its own Cmd-`. Turn it off for one entry per window; **Thumbnails** style brings back the original preview cells
 - **Dock Click Opens Recent Window** (default on): clicking a running app in the Dock brings forward only its most recent window — the same one the switcher would raise — instead of all of its windows. Hold, drag and modifier clicks still go to the Dock
 - **Style**: **Icons** (default) — the native look: app icons at the system switcher's size and spacing, shrinking as the list grows so the whole row fits the screen (down to a floor, then it scrolls), a filled highlight behind the selection, Dock badges (unread counts) on the icons, and the selected app's name beneath it, never truncated. Or **Thumbnails** — the original cells with a window preview or icon, title and app name. Icons style never captures previews, so it never asks for Screen Recording
 - **Shift-Tab** / Arrow keys to navigate in reverse — and **Option-Shift-Tab** opens the switcher already cycling backward, anchored on the least-recently-used window (new in 1.3.2)
@@ -75,7 +75,7 @@ If you want extensive customization, use lwouis/alttab. If you want something sm
 - Menu bar utility — no Dock icon, no clutter
 - Launch at Login support (macOS 13+ SMAppService)
 - Zero dependencies — pure Swift + AppKit
-- ~3,000 lines of code, single-purpose, auditable (146 unit tests on the pure-logic core, run in CI)
+- ~3,000 lines of code, single-purpose, auditable (152 unit tests on the pure-logic core, run in CI)
 
 ## The switcher
 
@@ -112,7 +112,7 @@ Everything else — the key table, MRU order, Q/H, Escape — is the same in bot
 
 AltTab tracks windows, not apps: its order is a most-recently-used list of every window, kept current by focus tracking. **Group by Application** (on by default) folds that list so each app appears once:
 
-- **What you see.** One entry per app, standing for the app's most recently used window. Apps are ordered by when you last used any of their windows, so the list reads exactly like the system switcher's — but driven by real focus history rather than app activation order. An app whose windows are all minimized or hidden is still listed; an app with no windows at all is not (the system switcher shows those too — that is the one difference).
+- **What you see.** One entry per app, standing for the app's most recently used visible window — a minimized window stands for the app only when all of its windows are minimized, and then its icon is dimmed. Apps are ordered by when you last used any of their windows, so the list reads exactly like the system switcher's — but driven by real focus history rather than app activation order. An app whose windows are all minimized or hidden is still listed; an app with no windows at all is not (the system switcher shows those too — that is the one difference).
 - **What confirming does.** Activates the app and raises that most recent window — un-minimizing it or pulling it in from another Space if needed. To move between the app's own windows afterwards, use the app's usual <kbd>Cmd</kbd> + <kbd>`</kbd>, which AltTab never intercepts.
 - **Q and H** act on the whole app: quit it, or hide it, and the switcher stays up.
 - **Selection.** The first Tab always lands on the *previous* app, even if the window you are in isn't its app's most recent one in the cache — the anchor maps your focused window onto its app's entry.
@@ -141,7 +141,7 @@ Everything lives in the menu bar item; there is no preferences window. Changes a
 |------|--------------|---------|
 | **Launch at Login** | Registers AltTab as a login item (macOS 13+ `SMAppService`). | off |
 | **Switcher Key** | **Option** keeps the system Cmd-Tab untouched. **Command** makes Cmd-Tab open AltTab instead of the system app switcher — the event tap swallows the keystroke before the Dock sees it, so nothing changes in System Settings and the system switcher is back the moment AltTab quits. | Option |
-| **Group by Application** | One entry per app (its most recent window) instead of one per window. | on |
+| **Group by Application** | One entry per app (its most recent visible window) instead of one per window. | on |
 | **Dock Click Opens Recent Window** | A plain click on a running app's Dock icon raises only its most recent window, like the switcher does, instead of all of its windows. Hold, drag, modifier clicks, the frontmost app and apps without windows go to the Dock as usual. | on |
 | **Style** | **Icons** — the native look described above — or **Thumbnails**, the original window cells. | Icons |
 | **Appearance** | Panel theme: follow the **System**, or force **Light** / **Dark**. | System |
